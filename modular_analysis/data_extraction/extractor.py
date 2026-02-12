@@ -11,10 +11,10 @@ from pathlib import Path
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from analysis_code import joannas_vc_test
-from analysis_code import joannas_IC_gap_free 
-from analysis_code import joannas_current_steps
-from analysis_code import joannas_brief_current
+from analysis_code import vc_test
+from analysis_code import IC_gap_free
+from analysis_code import current_steps
+from analysis_code import brief_current
 
 from ..shared.config import AnalysisConfig
 from ..shared.data_models import GroupInfo, DataContainer
@@ -119,7 +119,7 @@ class DataExtractor:
                 logger.warning(f"Brief current directory not found: {input_path}")
                 return False
                 
-            joannas_brief_current.analyze_bc(input_path, output_path)
+            brief_current.analyze_bc(input_path, output_path)
             
             return validate_file_exists(output_path)
             
@@ -138,7 +138,7 @@ class DataExtractor:
                 logger.warning(f"Membrane test directory not found: {input_path}")
                 return False
                 
-            joannas_vc_test.get_membrane_properties_from_vc(input_path, output_path)
+            vc_test.get_membrane_properties_from_vc(input_path, output_path)
             
             return validate_file_exists(output_path)
             
@@ -157,7 +157,7 @@ class DataExtractor:
                 logger.warning(f"Gap free directory not found: {input_path}")
                 return False
                 
-            joannas_IC_gap_free.get_resting_potential_from_gf(input_path, output_path)
+            IC_gap_free.get_resting_potential_from_gf(input_path, output_path)
             
             return validate_file_exists(output_path)
             
@@ -180,7 +180,7 @@ class DataExtractor:
                 logger.warning(f"Current steps directory not found: {input_path}")
                 return False
                 
-            joannas_current_steps.analyze_cc(input_path, output_path1, output_path2, output_path3)
+            current_steps.analyze_cc(input_path, output_path1, output_path2, output_path3)
             
             # Check that all outputs were created
             return all(validate_file_exists(p) for p in [output_path1, output_path2, output_path3])

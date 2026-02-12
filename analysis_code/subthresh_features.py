@@ -74,7 +74,7 @@ def voltage_deflection(t, v, i, start, end, deflect_type=None):
 
 
 def time_constant(t, v, i, start, end, max_fit_end=None,
-                  frac=0.1, baseline_interval=0.1, min_snr=20.):
+                  frac=0.1, baseline_interval=0.1, min_snr=10.):
     """Calculate the membrane time constant by fitting the voltage response with a
     single exponential.
 
@@ -92,7 +92,7 @@ def time_constant(t, v, i, start, end, max_fit_end=None,
         to find to determine start of fit window. (default 0.1)
     baseline_interval : duration before `start` for baseline Vm calculation
     min_snr : minimum signal-to-noise ratio (SNR) to allow calculation of time constant.
-        If SNR is too low, np.nan will be returned. (default 20)
+        If SNR is too low, np.nan will be returned. (default 10)
 
     Returns
     -------
@@ -110,6 +110,9 @@ def time_constant(t, v, i, start, end, max_fit_end=None,
 
     # Check that SNR is high enough to proceed
     signal = np.abs(v_baseline - v_peak)
+    if signal < 1.0:
+        logging.info("voltage deflection too small for time constant estimate ({:g} < 1 mV)".format(signal))
+        return np.nan
     noise_interval_start_index = tsu.find_time_index(t, start - baseline_interval)
     noise = np.std(v[noise_interval_start_index:start_index])
     if noise == 0: # noiseless - likely a deterministic model
@@ -117,7 +120,7 @@ def time_constant(t, v, i, start, end, max_fit_end=None,
     else:
         snr = signal / noise
     if snr < min_snr:
-        logging.debug("signal-to-noise ratio too low for time constant estimate ({:g} < {:g})".format(snr, min_snr))
+        logging.info("signal-to-noise ratio too low for time constant estimate ({:g} < {:g})".format(snr, min_snr))
         return np.nan
 
     search_result = np.flatnonzero(v[start_index:] <= frac * (v_peak - v_baseline) + v_baseline)
@@ -125,7 +128,17 @@ def time_constant(t, v, i, start, end, max_fit_end=None,
     if not search_result.size:
         raise FeatureError("could not find interval for time constant estimate")
     fit_start = t[search_result[0] + start_index]
-    fit_end = t[peak_index]
+    fit_end_raw = t[peak_index]
+
+    # Cap fit window: argmin can be noise late in trace. Use time-to-95% + 0.5*t_95.
+    target_95 = v_baseline + 0.95 * (v_peak - v_baseline)
+    cross_95 = np.flatnonzero(v[start_index:] <= target_95)
+    if cross_95.size > 0:
+        t_95 = t[cross_95[0] + start_index]
+        max_fit_end_cap = t_95 + 0.5 * (t_95 - start)  # end-of-descent + half the descent duration
+        fit_end = min(fit_end_raw, max_fit_end_cap)
+    else:
+        fit_end = fit_end_raw
 
     a, inv_tau, y0 = fit_membrane_time_constant(t, v, fit_start, fit_end, rmse_max_tol=1)
 
@@ -214,7 +227,7 @@ def fit_membrane_time_constant(t, v, start, end, rmse_max_tol = 1.0):
     rmse = np.sqrt(np.mean((pred - v_window)**2))
 
     if rmse >= rmse_max_tol:
-        logging.debug("RMSE %f for the Curve fit for membrane time constant exceeded the maximum tolerance of %f" % (rmse,rmse_max_tol))
+        logging.info("RMSE %f for the Curve fit for membrane time constant exceeded the maximum tolerance of %f" % (rmse,rmse_max_tol))
         return np.nan, np.nan, np.nan
 
     return popt

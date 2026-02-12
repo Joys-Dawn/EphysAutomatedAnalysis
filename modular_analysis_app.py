@@ -5,7 +5,6 @@ Implements A vs B independent groups analysis.
 
 import sys
 import os
-sys.dont_write_bytecode = True
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk

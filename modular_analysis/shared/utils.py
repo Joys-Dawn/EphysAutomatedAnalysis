@@ -106,9 +106,10 @@ def get_measurement_categories() -> Dict[str, List[str]]:
             "Max Instantaneous (Hz)",
             "Max Steady-state (Hz)",
             "ISI_CoV",
-            "SFA10", 
+            "SFA10",
             "SFAn",
-            "Burst_length (ms)"
+            "Initial Burst Length (ms)",
+            "Maximal Burst Length (ms)"
         ],
         "Individual AP Property": [
             "AP Peak (mV)",
@@ -376,3 +377,269 @@ def validate_manifest(df_long: pd.DataFrame, base_path: str) -> Tuple[bool, List
         logger.warning(f"Manifest validation failed with {len(errors)} errors")
     
     return is_valid, errors
+
+
+# Category order for formatted stats table (matches standard groupings)
+_STATS_TABLE_CATEGORY_ORDER = [
+    "Intrinsic Property", "Repetitive AP Property", "Individual AP Property", "Other"
+]
+
+
+def _is_p_significant(val) -> bool:
+    """True if p-value string or number is < 0.05."""
+    if pd.isna(val) or val == "":
+        return False
+    if isinstance(val, (int, float)):
+        return float(val) < 0.05
+    s = str(val).strip()
+    if s.startswith("<"):
+        return True
+    try:
+        return float(s) < 0.05
+    except ValueError:
+        return False
+
+
+def _format_p_value(p) -> str:
+    """Format p-value for table display: 4 decimal places."""
+    if pd.isna(p) or p is None:
+        return ""
+    p = float(p)
+    if p < 0.0001:
+        return "<0.0001"
+    return f"{p:.4f}"
+
+
+def _format_mean_se(mean, stderr) -> str:
+    """Format mean ± SE for table display."""
+    if pd.isna(mean):
+        return ""
+    m, s = float(mean), float(stderr) if not pd.isna(stderr) else 0
+    if pd.isna(s) or s == 0:
+        return f"{m:.2f}"
+    # Use reasonable precision (1–2 decimal places for SE)
+    se_str = f"{s:.2f}" if s >= 0.01 else f"{s:.3f}"
+    return f"{m:.2f} ± {se_str}"
+
+
+def create_formatted_stats_table(results_dir: str, output_path: Optional[str] = None) -> Optional[str]:
+    """Create a publication-style formatted stats table from Stats_parameters.csv.
+
+    Output: PowerPoint (.pptx) with Measurement | Group1 | Group2 | ... | Corrected Omnibus | Pairwise p-values.
+    Values: mean ± SE per group. Rows grouped by category (Intrinsic, Repetitive AP, Individual AP)
+    with category header rows. Plain white background, black gridlines, p<0.05 bold.
+
+    Args:
+        results_dir: Directory containing Stats_parameters.csv
+        output_path: Optional path. Default: results_dir/Stats_parameters_table.pptx
+
+    Returns:
+        Path to created .pptx file, or None if failed. Requires python-pptx.
+    """
+    csv_path = os.path.join(results_dir, "Stats_parameters.csv")
+    if not os.path.isfile(csv_path):
+        return None
+
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        logger.warning(f"Could not read Stats_parameters.csv: {e}")
+        return None
+
+    # Detect group columns: *_mean, *_stderr, *_n
+    group_names = []
+    for col in df.columns:
+        if col.endswith("_mean"):
+            group_names.append(col[:-5])  # strip "_mean"
+    if not group_names:
+        return None
+
+    # Detect omnibus corrected column
+    omnibus_corr_col = None
+    for c in ["Omnibus_corrected_p", "Corrected_omnibus_p"]:
+        if c in df.columns:
+            omnibus_corr_col = c
+            break
+
+    # Detect pairwise corrected columns (prefer _corrected_p over _p-value)
+    pairwise_cols = []
+    for col in df.columns:
+        if "_corrected_p" in col and col != omnibus_corr_col and "Omnibus" not in col:
+            pairwise_cols.append(col)
+
+    # Build table rows
+    rows = []
+
+    # Build output column order
+    out_columns = ["Measurement"] + group_names
+    if omnibus_corr_col:
+        out_columns.append("Corrected Omnibus")
+    pairwise_labels = [f"Corrected {c.replace('_corrected_p', '').strip()}" for c in pairwise_cols]
+    out_columns.extend(pairwise_labels)
+
+    # First row: n cells
+    n_row = {"Measurement": "n cells"}
+    for g in group_names:
+        n_col = f"{g}_n"
+        if n_col in df.columns:
+            n_vals = df[n_col].dropna()
+            n_val = int(n_vals.iloc[0]) if len(n_vals) > 0 else ""
+            n_row[g] = str(n_val) if n_val != "" else ""
+        else:
+            n_row[g] = ""
+    for col in out_columns[len(group_names) + 1:]:  # omnibus + pairwise
+        n_row[col] = ""
+    rows.append(n_row)
+
+    # Sort measurements by category (Intrinsic, Repetitive AP, Individual AP, Other)
+    df_sorted = df.copy()
+    df_sorted["_sort_cat"] = df_sorted["Measurement"].apply(categorize_measurement)
+    df_sorted["_sort_ord"] = df_sorted["_sort_cat"].apply(
+        lambda c: _STATS_TABLE_CATEGORY_ORDER.index(c) if c in _STATS_TABLE_CATEGORY_ORDER else 99
+    )
+    df_sorted = df_sorted.sort_values(["_sort_ord", "Measurement"]).drop(columns=["_sort_cat", "_sort_ord"], errors="ignore")
+
+    last_cat = None
+    for _, row in df_sorted.iterrows():
+        cat = categorize_measurement(row.get("Measurement", ""))
+        # Insert category separator row when category changes (including before first category)
+        if cat != last_cat:
+            sep_row = {"Measurement": cat}
+            for col in out_columns[1:]:
+                sep_row[col] = ""
+            rows.append(sep_row)
+        last_cat = cat
+
+        out = {"Measurement": row.get("Measurement", "")}
+        for g in group_names:
+            mean_col, se_col = f"{g}_mean", f"{g}_stderr"
+            out[g] = _format_mean_se(row.get(mean_col), row.get(se_col))
+        if omnibus_corr_col:
+            out["Corrected Omnibus"] = _format_p_value(row.get(omnibus_corr_col))
+        for pc, label in zip(pairwise_cols, pairwise_labels):
+            out[label] = _format_p_value(row.get(pc))
+        rows.append(out)
+
+    out_df = pd.DataFrame(rows, columns=out_columns)
+
+    pptx_path = output_path or os.path.join(results_dir, "Stats_parameters_table.pptx")
+
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+    from pptx.oxml.xmlchemy import OxmlElement
+
+    DML_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    EMU_PER_INCH = 914400
+
+    def _is_p_value_col(col: str) -> bool:
+        return col == "Corrected Omnibus" or col.startswith("Corrected ")
+
+    def _subel(parent, tag: str, **kwargs):
+        el = OxmlElement(tag)
+        el.attrib.update(kwargs)
+        parent.append(el)
+        return el
+
+    def _center_cell(cell):
+        for p in cell.text_frame.paragraphs:
+            p.alignment = PP_ALIGN.CENTER
+        cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    def _cell_white_black_border(cell):
+        tc = cell._tc
+        tcPr = tc.get_or_add_tcPr()
+        for c in list(tcPr):
+            tcPr.remove(c)
+        sf = _subel(tcPr, "a:solidFill")
+        _subel(sf, "a:srgbClr", val="FFFFFF")
+        for tag in ("a:lnL", "a:lnR", "a:lnT", "a:lnB"):
+            ln = _subel(tcPr, tag, w="12700", cap="flat", cmpd="sng", algn="ctr")
+            sfl = _subel(ln, "a:solidFill")
+            _subel(sfl, "a:srgbClr", val="000000")
+            _subel(ln, "a:prstDash", val="solid")
+            _subel(ln, "a:round")
+            _subel(ln, "a:headEnd", type="none", w="med", len="med")
+            _subel(ln, "a:tailEnd", type="none", w="med", len="med")
+
+    def _set_cell_margins(cell):
+        try:
+            cell.margin_top = 0
+            cell.margin_bottom = 0
+            cell.margin_left = 0
+            cell.margin_right = 0
+        except Exception:
+            pass
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[5])
+    n_rows, n_cols = len(out_df) + 1, len(out_columns)
+    table_width_in = 9.5
+    table_height_in = min(7.0, 0.28 * n_rows)
+    table_width = Inches(table_width_in)
+    table_height = Inches(table_height_in)
+    shape = slide.shapes.add_table(n_rows, n_cols, Inches(0.35), Inches(0.5), table_width, table_height)
+    table = shape.table
+
+    # Remove table style so cell-level white fill + black borders apply (clearing caused repair)
+    tbl = shape._element
+    style_el = tbl.find(f".//{{{DML_NS}}}tableStyleId")
+    if style_el is not None:
+        style_el.getparent().remove(style_el)
+
+    # Header row
+    for c, col_name in enumerate(out_columns):
+        cell = table.cell(0, c)
+        cell.text = str(col_name)
+        for p in cell.text_frame.paragraphs:
+            for r in p.runs:
+                r.font.size = Pt(10)
+
+    category_names = set(_STATS_TABLE_CATEGORY_ORDER)
+    for r, row in out_df.iterrows():
+        row_idx = r + 1
+        measurement = row.get("Measurement", "")
+
+        if measurement in category_names:
+            cell = table.cell(row_idx, 0)
+            cell.text = measurement
+            if n_cols > 1:
+                cell.merge(table.cell(row_idx, n_cols - 1))
+            for p in cell.text_frame.paragraphs:
+                for r in p.runs:
+                    r.font.size = Pt(9)
+        else:
+            for c, col in enumerate(out_columns):
+                val = row.get(col, "")
+                cell = table.cell(row_idx, c)
+                cell.text = "" if (pd.isna(val) or val == "") else str(val)
+                for p in cell.text_frame.paragraphs:
+                    for r in p.runs:
+                        r.font.size = Pt(9)
+                        r.font.bold = _is_p_value_col(col) and _is_p_significant(val)
+
+    row_height_emu = int(table_height_in * EMU_PER_INCH / n_rows)
+    col_width_emu = int(table_width_in * EMU_PER_INCH / n_cols)
+
+    for row_idx in range(n_rows):
+        for col_idx in range(n_cols):
+            cell = table.cell(row_idx, col_idx)
+            if not cell.is_spanned:
+                _center_cell(cell)
+                _set_cell_margins(cell)
+                _cell_white_black_border(cell)
+
+    # Uniform row height and column width (after content to reduce override)
+    for row in table.rows:
+        row.height = row_height_emu
+    for col in table.columns:
+        col.width = col_width_emu
+
+    # Force row heights in XML (tr.h) - PowerPoint sometimes ignores row.height
+    tbl = shape._element
+    for i, tr in enumerate(tbl.findall(f".//{{{DML_NS}}}tr")):
+        tr.set("h", str(row_height_emu))
+
+    prs.save(pptx_path)
+    logger.info(f"Saved formatted stats table to {pptx_path}")
+    return pptx_path

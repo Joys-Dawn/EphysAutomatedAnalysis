@@ -21,6 +21,7 @@ from .tests.attenuation_analysis_dependent import AttenuationAnalyzerDependent
 from .plotting import PlotGenerator
 from ..shared.data_models import ExperimentalDesign, DesignType, StatisticalResult
 from ..shared.config import AnalysisConfig
+from ..shared.utils import create_formatted_stats_table
 from ..data_extraction.extractor import DataExtractor
 
 logger = logging.getLogger(__name__)
@@ -107,7 +108,11 @@ class StatisticalAnalyzer:
             
             # Save basic statistical results
             self._save_statistical_results(statistical_results, design, base_path)
-            
+
+            # Create formatted stats table (publication-style, selected params only)
+            results_dir = os.path.join(base_path, self.config.output_dir)
+            create_formatted_stats_table(results_dir)
+
             # Run frequency analyses (current and fold rheobase vs frequency)
             frequency_results = self._run_frequency_analyses(design, base_path)
             results['frequency_analysis'] = frequency_results

@@ -1053,6 +1053,76 @@ class CurrentClampGapFreeData(ExperimentData):
         return mean_voltage
 
 
+def _plot_max_ss_verification(sweeps, frequencies, max_frequency_idx, max_frequency):
+    """Verification plot for max steady-state firing frequency (debug)."""
+    plt.close('all')
+    plt.figure(figsize=(32, 20))
+    for i, sweep in enumerate(sweeps):
+        offset = 140 * i
+        text_height = sweep.output_signal[0] + offset
+        plot_color = 'b'
+        for freq, idx in frequencies.items():
+            if idx == i:
+                plt.text(0, text_height, '{:.2f}Hz'.format(freq), fontsize=8)
+        if i == max_frequency_idx:
+            max_freq_peaks = sweeps[i].get_aps()
+            first_ap_time = max_freq_peaks[0][0]
+            last_ap_time = max_freq_peaks[-1][0]
+            time_diff = last_ap_time - first_ap_time
+            plt.text(
+                .95, text_height,
+                'Max SSFF: {} APs in {:.2f}s = {:.0f}Hz'.format(
+                    len(max_freq_peaks), time_diff, max_frequency),
+                horizontalalignment='right', fontsize=8
+            )
+            plt.axvline(first_ap_time)
+            plt.axvline(last_ap_time)
+            plot_color = 'g'
+        plt.plot(sweep.time_steps, sweep.output_signal + offset, color=plot_color)
+    plt.gca().get_yaxis().set_visible(False)
+    plt.savefig("max_ss_{}.png".format(sweep.sweep_name))
+
+
+def _compute_burst_metrics(aps):
+    """Compute ISI CoV, initial burst length, and maximal burst length.
+    aps: list of (time, voltage) tuples. Burst gap threshold: ISI > mean + 3*std.
+    Returns (isi_cov, initial_burst_length, maximal_burst_length).
+    """
+    if len(aps) < 2:
+        return np.nan, np.nan, np.nan
+
+    all_isi = [(aps[i + 1][0] - aps[i][0]) * 1000 for i in range(len(aps) - 1)]
+    isi_mean = np.mean(all_isi)
+    isi_stdev = np.std(all_isi)
+    threshold = isi_mean + 3 * isi_stdev
+    isi_cov = isi_stdev / isi_mean if isi_mean > 0 else np.nan
+
+    # Initial burst: from first AP to AP before first gap > threshold
+    initial_burst_length = None
+    for i, isi in enumerate(all_isi):
+        if isi > threshold:
+            initial_burst_length = (aps[i][0] - aps[0][0]) * 1000
+            break
+    if initial_burst_length is None:
+        initial_burst_length = (aps[-1][0] - aps[0][0]) * 1000
+
+    # Maximal burst: longest segment of consecutive APs with no gap > threshold
+    burst_starts = [0]
+    for i, isi in enumerate(all_isi):
+        if isi > threshold:
+            burst_starts.append(i + 1)
+    burst_starts.append(len(aps))
+
+    burst_durations = []
+    for j in range(len(burst_starts) - 1):
+        start_idx, end_idx = burst_starts[j], burst_starts[j + 1]
+        if end_idx > start_idx:
+            burst_durations.append((aps[end_idx - 1][0] - aps[start_idx][0]) * 1000)
+    maximal_burst_length = max(burst_durations) if burst_durations else np.nan
+
+    return isi_cov, initial_burst_length, maximal_burst_length
+
+
 class CurrentStepsData(ExperimentData):
     """Functions to get relevant metrics for 'current steps' experiments"""
     # This is a type hint for pycharm - not functional
@@ -1172,94 +1242,54 @@ class CurrentStepsData(ExperimentData):
 
         return sfa
 
-    def get_max_steady_state_firing_frequency(self, verify=False):
+    def _get_max_steady_state_sweep_idx(self):
+        """Return (max_frequency, sweep_idx) for the sweep with max steady-state firing frequency.
+        Returns (0.0, None) if no sweeps have sufficient peaks. Cached after first computation.
         """
-         Max steady state firing frequency:
-         max mean firing frequency in response to current injection with no
-         failures (AP amplitude at least 40mV and overshooting 0mV)
+        if hasattr(self, '_max_ss_cache') and self._max_ss_cache is not None:
+            return self._max_ss_cache
 
-        # TODO what should be returned. frequency. Driving voltage eliciting that frequency?
-        # TODO do we have to check for "missing" peaks
-        :return: frequency, inverse of timesteps units
-        """
-        def verification_plot():
-            plt.figure(figsize=(32, 20))
-            plt.close('all')
-            for i, sweep in enumerate(self.sweeps):
-                offset = 140 * i  # TODO Derive offset from data
-                text_height = sweep.output_signal[0] + offset
-                plot_color = 'b'
-                for freq, idx in frequencies.items():
-                    if idx == i:
-                        plt.text(0, text_height, '{:.2f}Hz'.format(freq), fontsize=8)
-                if i == max_frequency_idx:
-                    max_freq_peaks = self.sweeps[i].get_aps()
-                    first_ap_time = max_freq_peaks[0][0]
-                    last_ap_time = max_freq_peaks[-1][0]
-                    time_diff = last_ap_time - first_ap_time
-                    plt.text(
-                        .95,
-                        text_height,
-                        'Max SSFF: {} APs in {:.2f}s = {:.0f}Hz'.format(
-                            len(max_freq_peaks), time_diff, max_frequency),
-                        horizontalalignment='right',
-                        fontsize=8
-                    )
-                    plt.axvline(first_ap_time)
-                    plt.axvline(last_ap_time)
-                    plot_color = 'g'
-                plt.plot(sweep.time_steps, sweep.output_signal + offset, color=plot_color)
-
-            plt.gca().get_yaxis().set_visible(False)
-            plt.savefig("max_ss_{}.png".format(sweep.sweep_name))
-
-        def group_pv_cells(sweep):
-            aps = sweep.get_aps()
-            all_isi = []
-            burst_length = None
-
-            for i in range(len(aps) - 1):
-                isi = (aps[i + 1][0] - aps[i][0]) * 1000
-                all_isi.append(isi)
-
-            isi_mean = np.mean(np.array(all_isi))
-            isi_stdev = np.std(np.array(all_isi))
-
-            for i in range(len(all_isi)):
-                if all_isi[i] > (isi_mean + (3*isi_stdev)): #is above 3 stdevs
-                    burst_length = (aps[i][0] - aps[0][0]) * 1000
-                    break
-            if burst_length == None and len(aps) != 0:
-                burst_length = (aps[-1][0] - aps[0][0]) * 1000
-
-            isi_cov = isi_stdev / isi_mean
-            if len(aps) < 2:
-                isi_cov = np.nan
-                burst_length = np.nan
-            return isi_cov, burst_length
-            
-
-
-        # Start of function
-        frequencies = {}  # {<frequency>: sweep_num, ... }
+        frequencies = {}
         for i, sweep in enumerate(self.sweeps):
             sweep_ap_freq = sweep.get_steady_state_ap_frequency()
             frequencies[sweep_ap_freq] = i
 
         if len(frequencies) == 0:
             logger.warning('No sweep had enough peaks to calculate a frequency')
-            return 0.0
+            result = (0.0, None)
         else:
             max_frequency = max(frequencies)
             max_frequency_idx = frequencies[max_frequency]
-            #logger.info('Max SSFF is {} from sweep {}'.format(max_frequency, max_frequency_idx))
+            result = (max_frequency, max_frequency_idx)
 
-        if verify:
-            verification_plot()
+        self._max_ss_cache = result
+        return result
 
-        isi_cov, burst_length = group_pv_cells(self.sweeps[max_frequency_idx])
+    def get_max_steady_state_firing_frequency(self, verify=False):
+        """
+        Max steady state firing frequency: max mean firing frequency in response to
+        current injection with no failures (AP amplitude at least 40mV and overshooting 0mV).
 
-        return max_frequency, isi_cov, burst_length
+        :return: frequency (Hz), or 0.0 if no sweeps
+        """
+        max_frequency, max_frequency_idx = self._get_max_steady_state_sweep_idx()
+
+        if verify and max_frequency_idx is not None:
+            frequencies = {s.get_steady_state_ap_frequency(): i for i, s in enumerate(self.sweeps)}
+            _plot_max_ss_verification(self.sweeps, frequencies, max_frequency_idx, max_frequency)
+
+        return max_frequency
+
+    def get_burst_metrics_from_max_ss_sweep(self):
+        """ISI CoV, initial burst length, and maximal burst length from the max steady-state sweep.
+
+        :return: (isi_cov, initial_burst_length, maximal_burst_length) in ms
+        """
+        _, sweep_idx = self._get_max_steady_state_sweep_idx()
+        if sweep_idx is None:
+            return np.nan, np.nan, np.nan
+        aps = self.sweeps[sweep_idx].get_aps()
+        return _compute_burst_metrics(aps)
 
     def get_min_instantaneous_firing_frequency(self, verify=False):
         """
@@ -1628,7 +1658,7 @@ class CurrentStepsData(ExperimentData):
             # Calculate stimulus interval
             stimulus_start, stimulus_end = sweep.get_input_start_end()
             tau = time_constant(t, v, current, stimulus_start, stimulus_end,
-                                                    baseline_interval=stimulus_start, frac=0.01)
+                                                    baseline_interval=stimulus_start, frac=0.05)
             if(not np.isnan(tau)):
                 time_const += tau
                 num_added += 1
@@ -1665,38 +1695,6 @@ class CurrentStepsData(ExperimentData):
 
         return nums, peaks
     
-    def get_isi_cov_and_burst_length(self):
-        isi_covs = []
-        burst_lengths = []
-        for sweep in self.sweeps:
-            aps = sweep.get_aps()
-            all_isi = []
-            burst_length = None
-
-            for i in range(len(aps) - 1):
-                isi = (aps[i + 1][0] - aps[i][0]) * 1000
-                all_isi.append(isi)
-
-            isi_mean = np.mean(np.array(all_isi))
-            isi_stdev = np.std(np.array(all_isi))
-
-            for i in range(len(all_isi)):
-                if all_isi[i] > (isi_mean + (3*isi_stdev)): #is above 3 stdevs
-                    burst_length = (aps[i][0] - aps[0][0]) * 1000
-                    break
-            if burst_length == None and len(aps) != 0:
-                burst_length = (aps[-1][0] - aps[0][0]) * 1000
-
-            isi_cov = isi_stdev / isi_mean
-            if len(aps) < 2:
-                isi_cov = np.nan
-                burst_length = np.nan
-            isi_covs.append(isi_cov)
-            burst_lengths.append(burst_length)
-        
-        return isi_covs, burst_lengths
-                
-
     def plot_v_vs_i(self, sweep_num):
         """
         Just for testing

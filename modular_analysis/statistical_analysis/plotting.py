@@ -179,7 +179,7 @@ class PlotGenerator:
             group_data = {}
             for group in design.groups:
                 data = self._load_combined_data(group.name, base_path)
-                if not data.empty and 'ISI_CoV' in data.columns and 'Burst_length (ms)' in data.columns:
+                if not data.empty and 'ISI_CoV' in data.columns and 'Initial Burst Length (ms)' in data.columns:
                     group_data[group.name] = data
                     
             if len(group_data) < 2:
@@ -211,11 +211,11 @@ class PlotGenerator:
                 else:
                     label = format_group_label(group_name, group_info.italic if group_info else False)
                 
-                ax.scatter(data['ISI_CoV'], data['Burst_length (ms)'], 
+                ax.scatter(data['ISI_CoV'], data['Initial Burst Length (ms)'], 
                          color=color, label=label, s=110, marker=marker)
                          
             ax.set_xlabel("ISI CoV", fontsize=self.config.font_size_label)
-            ax.set_ylabel("Burst Length (ms)", fontsize=self.config.font_size_label)
+            ax.set_ylabel("Initial Burst Length (ms)", fontsize=self.config.font_size_label)
             ax.spines[['right', 'top']].set_visible(False)
             ax.tick_params(axis='both', which='major', labelsize=self.config.font_size_tick)
             ax.axhline(800.0, linestyle='--', c="black")
@@ -386,8 +386,8 @@ class PlotGenerator:
                               color="black", capsize=10, markersize=50, 
                               markeredgewidth=6, zorder=5)
             
-            # Set axis properties (leave Burst_length auto-scaled)
-            if column not in ['AP Threshold (mV)', 'Vm (mV)','Burst_length (ms)']:
+            # Set axis properties (leave burst length columns auto-scaled)
+            if column not in ['AP Threshold (mV)', 'Vm (mV)', 'Initial Burst Length (ms)', 'Maximal Burst Length (ms)']:
                 # Get the y-axis range to calculate margin
                 current_ylim = ax.get_ylim()
                 y_range = current_ylim[1] - current_ylim[0]
