@@ -2,6 +2,16 @@
 
 A Python GUI application for automated statistical analysis of patch clamp electrophysiology data. The application extracts electrophysiological parameters from `.abf` files, runs appropriate statistical tests based on experimental design, and generates publication-style plots and results tables.
 
+## Installation
+
+Download the latest release for your operating system from the [Releases page](https://github.com/ydemetri/EphysAutomatedAnalysis/releases):
+
+- **Windows**: `ModularAnalysis-windows.zip`
+- **macOS**: `ModularAnalysis-macos.zip`
+- **Linux**: `ModularAnalysis-linux.zip`
+
+Extract the zip and run the `ModularAnalysis` executable inside. No Python installation required.
+
 ## Example Outputs
 
 <p>
