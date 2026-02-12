@@ -167,9 +167,9 @@ def analyze_cc(ABF_LOCATION, CURRENT_VS_APS_OUTPUT_FILE, ANALYSIS_OUTPUT_FILE, A
 
     # Writing the additional analysis to output file
     with open(ANALYSIS_OUTPUT_FILE, 'w') as f:
-        f.write("filename,Rheobase (pA),Time Constant (ms),Sag,Max Steady-state (Hz),Max Instantaneous (Hz),SFA10,SFAn,ISI_CoV,Initial Burst Length (ms),Maximal Burst Length (ms),AP Threshold (mV),AP Peak (mV),AP Amplitude (mV),AP Rise Time (ms),APD 50 (ms),APD 90 (ms)\n")
+        f.write("filename,Rheobase (pA),Time Constant (ms),Sag,Max Steady-state (Hz),Max Instantaneous (Hz),SFA10,SFAn,ISI_CoV,Initial Burst Length (ms),Maximal Burst Length (ms),AP Threshold (mV),AP Peak (mV),AP Amplitude (mV),AP Rise Time (ms),AP Half-Width (ms),APD 50 (ms),APD 90 (ms)\n")
         for filename in ap_half_width_output:
-            f.write('{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(
+            f.write('{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(
                 filename,
                 rheobase_output[filename],
                 time_constant_output[filename],
@@ -185,10 +185,7 @@ def analyze_cc(ABF_LOCATION, CURRENT_VS_APS_OUTPUT_FILE, ANALYSIS_OUTPUT_FILE, A
                 ap_peak_output[filename],
                 ap_amplitude_output[filename],
                 ap_rise_time_output[filename],
-                #ap_half_width_output[filename],
-                #apd_output[filename],
+                ap_half_width_output[filename],
                 apd50_output[filename],
                 apd90_output[filename]
-                #upstroke_vel_output[filename],
-                #downstroke_vel_output[filename]
             ))

@@ -14,6 +14,7 @@ from .tests.paired_ttest import PairedTTest
 from .tests.oneway_anova import OneWayANOVA
 from .tests.two_way_anova import TwoWayANOVA
 from .tests.mixed_anova import MixedANOVA
+from .tests.repeated_measures_anova import RepeatedMeasuresANOVA
 from .tests.frequency_analysis import FrequencyAnalyzer
 from .tests.frequency_analysis_dependent import FrequencyAnalyzerDependent
 from .tests.attenuation_analysis import AttenuationAnalyzer
@@ -147,31 +148,23 @@ class StatisticalAnalyzer:
             
         return results
     
+    # Map design types to their test classes
+    _TEST_CLASS_MAP = {
+        DesignType.INDEPENDENT_TWO_GROUP: UnpairedTTest,
+        DesignType.PAIRED_TWO_GROUP: PairedTTest,
+        DesignType.INDEPENDENT_MULTI_GROUP: OneWayANOVA,
+        DesignType.REPEATED_MEASURES: RepeatedMeasuresANOVA,
+        DesignType.FACTORIAL_2X2: TwoWayANOVA,
+        DesignType.MIXED_FACTORIAL: MixedANOVA,
+    }
+
     def _run_statistical_tests(self, design: ExperimentalDesign, base_path: str,
                                selected_measurements: Optional[List[str]] = None) -> List[StatisticalResult]:
         """Select and run appropriate statistical tests based on design type."""
-        
-        if design.design_type == DesignType.INDEPENDENT_TWO_GROUP:
-            test = UnpairedTTest()
-            return test.run_analysis(design, None, base_path, selected_measurements)
-        elif design.design_type == DesignType.PAIRED_TWO_GROUP:
-            test = PairedTTest()
-            return test.run_analysis(design, None, base_path, selected_measurements)
-        elif design.design_type == DesignType.INDEPENDENT_MULTI_GROUP:
-            test = OneWayANOVA()
-            return test.run_analysis(design, None, base_path, selected_measurements)
-        elif design.design_type == DesignType.REPEATED_MEASURES:
-            from .tests.repeated_measures_anova import RepeatedMeasuresANOVA
-            test = RepeatedMeasuresANOVA()
-            return test.run_analysis(design, None, base_path, selected_measurements)
-        elif design.design_type == DesignType.FACTORIAL_2X2:
-            test = TwoWayANOVA()
-            return test.run_analysis(design, None, base_path, selected_measurements)
-        elif design.design_type == DesignType.MIXED_FACTORIAL:
-            test = MixedANOVA()
-            return test.run_analysis(design, None, base_path, selected_measurements)
-        else:
+        test_class = self._TEST_CLASS_MAP.get(design.design_type)
+        if test_class is None:
             raise NotImplementedError(f"Design type {design.design_type} not yet implemented")
+        return test_class().run_analysis(design, None, base_path, selected_measurements)
     
     def _save_statistical_results(self, results: List[StatisticalResult], 
                                  design: ExperimentalDesign, base_path: str) -> None:
@@ -185,40 +178,10 @@ class StatisticalAnalyzer:
         results_dir = os.path.join(base_path, self.config.output_dir)
         os.makedirs(results_dir, exist_ok=True)
         
-        # Save main results file
-        if design.design_type == DesignType.INDEPENDENT_TWO_GROUP:
-            output_file = os.path.join(results_dir, "Stats_Group1_vs_Group2.csv")
-            test = UnpairedTTest()
-            test.save_results(results, output_file)
-        elif design.design_type == DesignType.PAIRED_TWO_GROUP:
-            output_file = os.path.join(results_dir, "Stats_Group1_vs_Group2.csv")
-            test = PairedTTest()
-            test.save_results(results, output_file)
-        elif design.design_type == DesignType.REPEATED_MEASURES:
-            output_file = os.path.join(results_dir, "Stats_Group_comparison.csv")
-            from .tests.repeated_measures_anova import RepeatedMeasuresANOVA
-            test = RepeatedMeasuresANOVA()
-            test.save_results(results, output_file, design, base_path)
-        elif design.design_type == DesignType.INDEPENDENT_MULTI_GROUP:
-            output_file = os.path.join(results_dir, "Stats_Group_comparison.csv")  
-            test = OneWayANOVA()
-            test.save_results(results, output_file, design, base_path)
-        elif design.design_type == DesignType.FACTORIAL_2X2:
-            # Dynamic filename based on actual N×M dimensions
-            n_factor1_levels = len(set(design.factor_mapping[g]['factor1'] for g in design.factor_mapping))
-            n_factor2_levels = len(set(design.factor_mapping[g]['factor2'] for g in design.factor_mapping))
-            output_file = os.path.join(results_dir, f"Stats_Parameters.csv")
-            test = TwoWayANOVA()
-            test.save_results(results, output_file, design, base_path)
-        elif design.design_type == DesignType.MIXED_FACTORIAL:
-            # Dynamic filename based on actual N×M dimensions
-            manifest = design.pairing_manifest
-            n_between = len(manifest['Group'].unique())
-            n_within = len(manifest['Condition'].unique())
-            output_file = os.path.join(results_dir, f"Stats_Parameters.csv")
-            # Save mixed factorial results using new format (matches independent factorial)
-            test = MixedANOVA()
-            test.save_results(results, output_file, design, base_path)
+        test_class = self._TEST_CLASS_MAP.get(design.design_type)
+        if test_class is None:
+            raise NotImplementedError(f"Design type {design.design_type} not yet implemented")
+        test_class().save_results(results, base_path, design)
             
     def _run_frequency_analyses(self, design: ExperimentalDesign, base_path: str) -> Dict[str, any]:
         """Run frequency-related statistical analyses."""

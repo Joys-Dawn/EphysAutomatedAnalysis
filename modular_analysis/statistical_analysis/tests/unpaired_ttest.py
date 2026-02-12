@@ -211,7 +211,8 @@ class UnpairedTTest:
         
         return results
     
-    def save_results(self, results: List[StatisticalResult], output_path: str) -> None:
+    def save_results(self, results: List[StatisticalResult], base_path: str,
+                    design=None) -> None:
         """Save statistical results to CSV file."""
         
         if not results:
@@ -252,8 +253,7 @@ class UnpairedTTest:
         column_order = base_columns + sorted(group_columns) + p_value_columns
         df = df[column_order]
         
-        # Save with Stats_parameters.csv filename
-        results_dir = os.path.dirname(output_path)
+        results_dir = os.path.join(base_path, "Results")
         parameters_output = os.path.join(results_dir, "Stats_parameters.csv")
         df.to_csv(parameters_output, index=False)
         logger.info(f"Saved results to {parameters_output}")

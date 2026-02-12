@@ -8,6 +8,10 @@ import numpy as np
 from scipy.stats import skew, kurtosis
 from typing import List, Dict, Optional, Tuple
 import logging
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.oxml.xmlchemy import OxmlElement
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -116,6 +120,7 @@ def get_measurement_categories() -> Dict[str, List[str]]:
             "AP Threshold (mV)",
             "AP Amplitude (mV)",
             "AP Rise Time (ms)",
+            "AP Half-Width (ms)",
             "APD 50 (ms)",
             "APD 90 (ms)",
             "AHP Amplitude (mV)"
@@ -523,11 +528,6 @@ def create_formatted_stats_table(results_dir: str, output_path: Optional[str] = 
     out_df = pd.DataFrame(rows, columns=out_columns)
 
     pptx_path = output_path or os.path.join(results_dir, "Stats_parameters_table.pptx")
-
-    from pptx import Presentation
-    from pptx.util import Inches, Pt
-    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-    from pptx.oxml.xmlchemy import OxmlElement
 
     DML_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
     EMU_PER_INCH = 914400

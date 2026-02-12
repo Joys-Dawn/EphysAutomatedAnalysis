@@ -442,8 +442,8 @@ class OneWayANOVA:
         
         return pairwise_results
     
-    def save_results(self, results: List[StatisticalResult], output_path: str, 
-                    design: ExperimentalDesign = None, base_path: str = None) -> None:
+    def save_results(self, results: List[StatisticalResult], base_path: str, 
+                    design: ExperimentalDesign = None) -> None:
         """Save statistical results to CSV file - combined format with all stats in one row per measurement."""
         
         if not results:
@@ -613,8 +613,7 @@ class OneWayANOVA:
         combined_df = combined_df[ordered_columns]
         
         # Save combined results
-        # Replace filename entirely with Stats_parameters.csv
-        results_dir = os.path.dirname(output_path)
+        results_dir = os.path.join(base_path, "Results")
         combined_output = os.path.join(results_dir, "Stats_parameters.csv")
         combined_df.to_csv(combined_output, index=False)
         logger.info(f"Saved combined parameters to {combined_output}")

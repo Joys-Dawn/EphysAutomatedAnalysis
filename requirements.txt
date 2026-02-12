@@ -1,0 +1,11 @@
+matplotlib>=3.10.0
+numpy>=2.2.2
+pandas>=2.2.3
+patsy>=1.0.1
+pingouin>=0.5.5
+pyabf>=2.3.8
+python-pptx>=1.0.2
+scikit-posthocs>=0.11.4
+scipy>=1.15.2
+seaborn>=0.13.2
+statsmodels>=0.14.5

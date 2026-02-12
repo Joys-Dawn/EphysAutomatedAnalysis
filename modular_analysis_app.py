@@ -845,16 +845,8 @@ class ModularAnalysisApp:
         design_name = self.design_type.get()
         if "2 independent groups" in design_name or "Paired design" in design_name:
             return 2
-        elif "Repeated measures" in design_name:
-            return 20  # Allow up to many repeated measures conditions
-        elif "Mixed factorial" in design_name:
-            return 20  # Allow up to large mixed designs (e.g., 2×10, 4×5)
-        elif "Factorial design" in design_name:
-            return 20  # Allow up to large factorial designs (e.g., 4×5, 2×10)
-        elif "3+ independent groups" in design_name:
-            return 10  # Reasonable upper limit
         else:
-            return 2  # Default
+            return 20
     
     def _assign_default_colors(self):
         """Assign default colors to selected groups."""
