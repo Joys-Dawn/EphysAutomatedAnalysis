@@ -161,7 +161,7 @@ class PairedTTest:
     
     def _get_analysis_columns(self, df: pd.DataFrame) -> List[str]:
         """Get columns that should be analyzed statistically."""
-        exclude_columns = ["filename", "Group", "geno", "Subject_ID", "Condition"]
+        exclude_columns = ["filename", "Group", "geno", "Subject_ID", "Condition", "Mouse_ID"]
         return [col for col in df.columns if col not in exclude_columns]
     
     def _run_single_paired_test(self, column: str, unified_df: pd.DataFrame,

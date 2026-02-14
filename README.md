@@ -272,6 +272,75 @@ Post-hoc contrasts use Wald tests on the fitted model.
 
 ---
 
+## Linear Mixed Models (Optional)
+
+By default, the application uses classical statistical tests (t-tests, ANOVAs) that treat each cell as an independent observation. However, in patch clamp experiments multiple cells are often recorded from the same mouse, violating the independence assumption and inflating Type I error rates.
+
+**Linear Mixed Models (LMMs)** account for this nested structure by modeling mouse as a random effect, correctly partitioning within-mouse and between-mouse variance. This is the statistically appropriate approach when you have multiple cells per mouse.
+
+### Requirements
+
+LMMs require [R](https://www.r-project.org/) to be installed on your system. The required R packages (`lmerTest` and `emmeans`) are installed automatically on first use.
+
+**Windows:**
+1. Download R from https://cran.r-project.org/bin/windows/base/
+2. Run the installer. **Important**: when prompted, check **"Add R to PATH"** (or "Save version number in registry").
+3. Restart the application after installing R.
+
+**macOS:**
+1. Download the `.pkg` installer from https://cran.r-project.org/bin/macosx/
+2. Run the installer (R is added to PATH automatically).
+3. Alternatively: `brew install r` if you use Homebrew.
+
+**Linux (Debian/Ubuntu):**
+```
+sudo apt install r-base
+```
+
+**Linux (Fedora/RHEL):**
+```
+sudo dnf install R
+```
+
+If R is not installed or cannot be found, the application silently falls back to classical tests for all measurements.
+
+### Mouse Log CSV
+
+To use LMMs, you need a **mouse log** CSV file that maps each recording file to the mouse it came from. The format is:
+
+| Filename | Mouse_ID |
+|---|---|
+| 2024_03_14_0020.abf | WT_mouse1 |
+| 2024_03_14_0021.abf | WT_mouse1 |
+| 2024_03_14_0022.abf | KO_mouse2 |
+
+- **Filename**: The `.abf` filename (with or without extension).
+- **Mouse_ID**: An identifier for the mouse. Multiple cells from the same mouse share the same ID.
+
+Every `.abf` file used in the analysis must appear in the mouse log.
+
+### Enabling LMMs
+
+In **Tab 4 (Statistical Analysis)**, check **"Account for mouse clustering"**. This reveals a file picker where you select your mouse log CSV. The analysis then uses LMMs wherever possible, falling back to classical tests for individual measurements where the LMM fails to converge.
+
+### Statistical Model
+
+All designs use an LMM with a random intercept for Mouse_ID to account for within-mouse correlation. For paired, repeated measures, and mixed factorial designs, a nested random intercept for Cell_ID within Mouse_ID is also included. Omnibus p-values use Satterthwaite degrees of freedom. Post-hoc comparisons use estimated marginal means (`emmeans`) rather than raw pairwise t-tests. FDR correction is applied identically to the classical pathway.
+
+### Fallback Behavior
+
+LMMs can fail for individual measurements (e.g., too few mice, singular model fit, convergence failure). When this happens, that specific measurement automatically falls back to the corresponding classical test. Other measurements that fit successfully still use LMM results. This means a single analysis run can contain a mix of LMM and classical results -- the `Test_Type` column in `Stats_parameters.csv` indicates which method was used for each measurement.
+
+### Result Labeling
+
+LMM results are labeled differently from classical results in the output:
+
+- **Omnibus tests**: Named "Linear Mixed Model", "Linear Mixed Model (one-way)", etc. instead of "t-test", "One-way ANOVA", etc.
+- **Post-hoc comparisons**: Named "LMM contrast" or "LMM simple effect" instead of "t-test" or "pairwise t-test".
+- **Test_Type column**: Shows the LMM variant used, making it clear which statistical method produced each result.
+
+---
+
 ## Output Files
 
 All outputs are saved in a `Results/` folder within the data directory:

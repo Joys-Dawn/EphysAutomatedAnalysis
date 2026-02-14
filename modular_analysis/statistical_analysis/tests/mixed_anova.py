@@ -137,7 +137,7 @@ class MixedANOVA:
     def _get_analysis_columns(self, df: pd.DataFrame) -> List[str]:
         """Get columns suitable for statistical analysis (excluding metadata)."""
         
-        exclude_columns = ['Filename', 'Subject_ID', 'Between_Factor', 'Within_Factor', 'Group_Name', 'filename']
+        exclude_columns = ['Filename', 'Subject_ID', 'Between_Factor', 'Within_Factor', 'Group_Name', 'filename', 'Mouse_ID']
         
         analysis_cols = []
         for col in df.columns:
@@ -903,7 +903,7 @@ class MixedANOVA:
         measurement_test_groups = {}
         for result in results:
             # Create key: (measurement, test_type)
-            test_type = "Paired" if "Paired" in result.test_name else "Independent"
+            test_type = "Within" if any(k in result.test_name for k in ("Paired", "within", "Within")) else "Between"
             key = (result.measurement, test_type)
             
             if key not in measurement_test_groups:
@@ -951,8 +951,8 @@ class MixedANOVA:
             return
         
         # Separate main effects and post-hoc results
-        main_effects = [r for r in results if "Mixed ANOVA -" in r.test_name]
-        posthoc_results = [r for r in results if "t-test" in r.test_name]
+        main_effects = [r for r in results if r.test_name.startswith(self.name) and " - " in r.test_name]
+        posthoc_results = [r for r in results if r not in main_effects]
         
         # Get all groups
         if design and design.groups:

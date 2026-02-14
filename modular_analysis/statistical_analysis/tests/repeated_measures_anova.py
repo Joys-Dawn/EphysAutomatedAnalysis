@@ -121,7 +121,7 @@ class RepeatedMeasuresANOVA:
     
     def _get_analysis_columns(self, df: pd.DataFrame) -> List[str]:
         """Get columns that should be analyzed statistically."""
-        exclude_columns = ["filename", "Group", "geno", "Subject_ID"]
+        exclude_columns = ["filename", "Group", "geno", "Subject_ID", "Mouse_ID"]
         return [col for col in df.columns if col not in exclude_columns]
     
     def _run_single_rm_anova(self, column: str, all_group_data: Dict[str, pd.DataFrame],
@@ -150,27 +150,24 @@ class RepeatedMeasuresANOVA:
             if column not in group_df.columns:
                 continue
             
-            # Get subject IDs for this condition from manifest
-            condition_manifest = manifest[manifest['Condition'] == condition]
+            # Build filename -> Subject_ID dict for this condition (strip .abf for matching)
+            cond_manifest = manifest[manifest['Condition'] == condition]
+            filename_to_subject = {
+                fn.replace('.abf', ''): sid
+                for fn, sid in zip(cond_manifest['Filename'], cond_manifest['Subject_ID'])
+            }
             
-            # Match subjects with their data
-            for _, row in condition_manifest.iterrows():
-                subject_id = row['Subject_ID']
-                filename = row['Filename']
-                
-                # Find matching data by filename
-                matching_rows = group_df[group_df['filename'].str.contains(
-                    filename.replace('.abf', ''), case=False, na=False
-                )]
-                
-                if not matching_rows.empty:
-                    value = matching_rows[column].iloc[0]
-                    if pd.notna(value):
-                        long_data.append({
-                            'Subject_ID': subject_id,
-                            'Condition': condition,
-                            'Value': value
-                        })
+            # Map filenames to Subject_IDs via exact lookup (same approach as paired_ttest)
+            normed_filenames = group_df['filename'].str.replace('.abf', '', regex=False)
+            subject_ids = normed_filenames.map(filename_to_subject)
+            mask = subject_ids.notna() & group_df[column].notna()
+            
+            for sid, val in zip(subject_ids[mask], group_df.loc[mask, column]):
+                long_data.append({
+                    'Subject_ID': sid,
+                    'Condition': condition,
+                    'Value': val
+                })
         
         if len(long_data) < len(conditions) * 3:  # Need at least 3 subjects with complete data
             logger.warning(f"Insufficient data for RM-ANOVA on {column}: {len(long_data)} observations")
@@ -178,14 +175,16 @@ class RepeatedMeasuresANOVA:
         
         df_long = pd.DataFrame(long_data)
         
-        # Check if we have complete data (all subjects measured in all conditions)
-        subjects_per_condition = df_long.groupby('Condition')['Subject_ID'].nunique()
-        if subjects_per_condition.min() < 3:
-            logger.warning(f"Insufficient subjects per condition for {column}")
+        # Filter to complete cases (subjects present in all conditions)
+        subject_cond_counts = df_long.groupby('Subject_ID')['Condition'].nunique()
+        complete_subjects = subject_cond_counts[subject_cond_counts == len(conditions)].index
+        df_long = df_long[df_long['Subject_ID'].isin(complete_subjects)]
+        
+        if len(complete_subjects) < 3:
+            logger.warning(f"Insufficient complete cases for RM-ANOVA on {column}")
             return None
         
-        # Decide parametric vs nonparametric using residuals (standard check for RM ANOVA)
-        # Residuals = value minus each subject's mean across conditions
+        # Decide parametric vs nonparametric using complete-case residuals
         subject_means = (
             df_long.groupby('Subject_ID')['Value'].mean().rename('SubjectMean')
         )
@@ -320,37 +319,34 @@ class RepeatedMeasuresANOVA:
         if column not in group1_df.columns or column not in group2_df.columns:
             return None
         
-        # Match subjects across conditions
-        data1_list = []
-        data2_list = []
+        # Build filename -> Subject_ID dicts per condition (strip .abf for matching)
+        cond1_manifest = manifest[manifest['Condition'] == cond1]
+        cond2_manifest = manifest[manifest['Condition'] == cond2]
+        fn_to_subject1 = {
+            fn.replace('.abf', ''): sid
+            for fn, sid in zip(cond1_manifest['Filename'], cond1_manifest['Subject_ID'])
+        }
+        fn_to_subject2 = {
+            fn.replace('.abf', ''): sid
+            for fn, sid in zip(cond2_manifest['Filename'], cond2_manifest['Subject_ID'])
+        }
         
-        # Get all subjects that appear in both conditions
-        subjects_cond1 = set(manifest[manifest['Condition'] == cond1]['Subject_ID'])
-        subjects_cond2 = set(manifest[manifest['Condition'] == cond2]['Subject_ID'])
-        common_subjects = subjects_cond1.intersection(subjects_cond2)
+        # Map filenames to Subject_IDs via exact lookup (same approach as paired_ttest)
+        normed1 = group1_df['filename'].str.replace('.abf', '', regex=False)
+        normed2 = group2_df['filename'].str.replace('.abf', '', regex=False)
+        sids1 = normed1.map(fn_to_subject1)
+        sids2 = normed2.map(fn_to_subject2)
         
-        for subject_id in common_subjects:
-            # Get filenames for this subject in both conditions
-            filename1 = manifest[(manifest['Subject_ID'] == subject_id) & 
-                                (manifest['Condition'] == cond1)]['Filename'].iloc[0]
-            filename2 = manifest[(manifest['Subject_ID'] == subject_id) & 
-                                (manifest['Condition'] == cond2)]['Filename'].iloc[0]
-            
-            # Find matching data
-            match1 = group1_df[group1_df['filename'].str.contains(
-                filename1.replace('.abf', ''), case=False, na=False
-            )]
-            match2 = group2_df[group2_df['filename'].str.contains(
-                filename2.replace('.abf', ''), case=False, na=False
-            )]
-            
-            if not match1.empty and not match2.empty:
-                val1 = match1[column].iloc[0]
-                val2 = match2[column].iloc[0]
-                
-                if pd.notna(val1) and pd.notna(val2):
-                    data1_list.append(val1)
-                    data2_list.append(val2)
+        # Build subject -> value dicts (take first match per subject)
+        mask1 = sids1.notna() & group1_df[column].notna()
+        mask2 = sids2.notna() & group2_df[column].notna()
+        subject_val1 = dict(zip(sids1[mask1], group1_df.loc[mask1, column]))
+        subject_val2 = dict(zip(sids2[mask2], group2_df.loc[mask2, column]))
+        
+        # Find common subjects and build aligned paired arrays
+        common_subjects = sorted(set(subject_val1) & set(subject_val2))
+        data1_list = [subject_val1[s] for s in common_subjects]
+        data2_list = [subject_val2[s] for s in common_subjects]
         
         # Check if we have sufficient paired data
         if len(data1_list) < 3:
@@ -406,7 +402,7 @@ class RepeatedMeasuresANOVA:
             category_results = [
                 r for r in results
                 if r.measurement_type == category_name
-                and (r.test_name == self.name or "Friedman" in r.test_name)
+                and (self.name in r.test_name or "Friedman" in r.test_name)
             ]
             
             if len(category_results) > 1:
@@ -514,7 +510,7 @@ class RepeatedMeasuresANOVA:
         # Separate RM-ANOVA/Friedman and pairwise results
         anova_results = [
             r for r in results
-            if r.test_name == self.name or "Friedman" in r.test_name
+            if self.name in r.test_name or "Friedman" in r.test_name
         ]
         pairwise_results = [r for r in results if "Pairwise" in r.test_name]
         

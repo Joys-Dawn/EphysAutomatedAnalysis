@@ -120,7 +120,7 @@ class OneWayANOVA:
     
     def _get_analysis_columns(self, df: pd.DataFrame) -> List[str]:
         """Get columns that should be analyzed statistically."""
-        exclude_columns = ["filename", "Group", "geno"]
+        exclude_columns = ["filename", "Group", "geno", "Mouse_ID"]
         return [col for col in df.columns if col not in exclude_columns]
     
     def _run_single_anova(self, column: str, group_data: Dict[str, pd.DataFrame], 

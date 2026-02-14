@@ -77,6 +77,10 @@ class ModularAnalysisApp:
         self.measurement_vars = {}  # Dict[str, tk.BooleanVar] for each measurement
         self.category_vars = {}  # Dict[str, tk.BooleanVar] for Select All per category
         
+        # Mixed model state
+        self.use_mixed_models = tk.BooleanVar(value=False)
+        self.mouse_log_path = tk.StringVar()
+        
         self.setup_ui()
         
     def setup_ui(self):
@@ -324,6 +328,25 @@ class ModularAnalysisApp:
                                    state='readonly', width=85)
         design_combo.pack(pady=5)
         
+        # Mixed model options (compact, inside design frame)
+        mixed_row = ttk.Frame(design_frame)
+        mixed_row.pack(fill='x', pady=(5, 0))
+        
+        ttk.Checkbutton(
+            mixed_row, text="Account for mouse clustering",
+            variable=self.use_mixed_models, command=self._toggle_mouse_log
+        ).pack(side='left')
+        
+        self.mouse_log_frame = ttk.Frame(mixed_row)
+        
+        ttk.Label(self.mouse_log_frame, text="Mouse log:").pack(side='left', padx=(10, 0))
+        self.mouse_log_entry = ttk.Entry(self.mouse_log_frame, textvariable=self.mouse_log_path, width=40)
+        self.mouse_log_entry.pack(side='left', padx=(5, 5), fill='x', expand=True)
+        self.mouse_log_browse_btn = ttk.Button(
+            self.mouse_log_frame, text="Browse...", command=self._browse_mouse_log
+        )
+        self.mouse_log_browse_btn.pack(side='right')
+        
         # Group assignment
         assignment_frame = ttk.LabelFrame(parent, text="Group Assignment", padding=10)
         assignment_frame.pack(fill='x', padx=5, pady=5)
@@ -333,8 +356,13 @@ class ModularAnalysisApp:
         left_frame.pack(side='left', padx=5)
         
         ttk.Label(left_frame, text="Available Groups:").pack(anchor='w')
-        self.available_listbox = tk.Listbox(left_frame, height=4, width=25)
-        self.available_listbox.pack(pady=5)
+        avail_list_frame = ttk.Frame(left_frame)
+        avail_list_frame.pack(pady=5)
+        self.available_listbox = tk.Listbox(avail_list_frame, height=4, width=25)
+        avail_scrollbar = ttk.Scrollbar(avail_list_frame, orient="vertical", command=self.available_listbox.yview)
+        self.available_listbox.configure(yscrollcommand=avail_scrollbar.set)
+        self.available_listbox.pack(side='left')
+        avail_scrollbar.pack(side='right', fill='y')
         # Bind click to move to selected
         self.available_listbox.bind('<Button-1>', self.on_available_click)
         
@@ -350,8 +378,13 @@ class ModularAnalysisApp:
         right_frame.pack(side='left', padx=5)
         
         ttk.Label(right_frame, text="Selected Groups:").pack(anchor='w')
-        self.selected_listbox = tk.Listbox(right_frame, height=4, width=25)
-        self.selected_listbox.pack(pady=5)
+        sel_list_frame = ttk.Frame(right_frame)
+        sel_list_frame.pack(pady=5)
+        self.selected_listbox = tk.Listbox(sel_list_frame, height=4, width=25)
+        sel_scrollbar = ttk.Scrollbar(sel_list_frame, orient="vertical", command=self.selected_listbox.yview)
+        self.selected_listbox.configure(yscrollcommand=sel_scrollbar.set)
+        self.selected_listbox.pack(side='left')
+        sel_scrollbar.pack(side='right', fill='y')
         # Bind click to move to available
         self.selected_listbox.bind('<Button-1>', self.on_selected_click)
         
@@ -407,6 +440,22 @@ class ModularAnalysisApp:
         self.analysis_progress['value'] = 0  # Start completely grey/empty
         self.analysis_progress['maximum'] = 100
         
+    def _toggle_mouse_log(self):
+        """Show/hide mouse log file picker based on checkbox state."""
+        if self.use_mixed_models.get():
+            self.mouse_log_frame.pack(side='left', fill='x', expand=True, padx=(5, 0))
+        else:
+            self.mouse_log_frame.pack_forget()
+    
+    def _browse_mouse_log(self):
+        """Browse for mouse log CSV file."""
+        filepath = filedialog.askopenfilename(
+            title="Select Mouse Log CSV",
+            filetypes=[("All files", "*.*"), ("CSV files", "*.csv"), ("Excel files", "*.xlsx *.xls")]
+        )
+        if filepath:
+            self.mouse_log_path.set(filepath)
+    
     def browse_directory(self):
         """Browse for data directory."""
         directory = filedialog.askdirectory(title="Select Data Directory")
@@ -688,6 +737,13 @@ class ModularAnalysisApp:
             messagebox.showerror("Error", "Please select a data directory first")
             return
         
+        # Validate mixed model settings
+        use_mixed = self.use_mixed_models.get()
+        mouse_log = self.mouse_log_path.get() if use_mixed else None
+        if use_mixed and not mouse_log:
+            messagebox.showerror("Error", "Please select a mouse log CSV file")
+            return
+        
         # Get factorial mapping BEFORE starting worker thread (if needed)
         factor_mapping = None
         mixed_mapping = None
@@ -802,7 +858,10 @@ class ModularAnalysisApp:
                 selected_measurements = self.get_selected_measurements()
                 
                 # Run analysis
-                results = self.analyzer.run_analysis(design, self.base_path.get(), selected_measurements)
+                results = self.analyzer.run_analysis(
+                    design, self.base_path.get(), selected_measurements,
+                    mouse_log_path=mouse_log, use_mixed_models=use_mixed
+                )
                 
                 if results['success']:
                     self.root.after(0, lambda: messagebox.showinfo("Analysis Complete", "Done"))
@@ -1153,7 +1212,7 @@ class ModularAnalysisApp:
         def browse_manifest():
             filename = filedialog.askopenfilename(
                 title="Select Pairing Manifest",
-                filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+                filetypes=[("All files", "*.*"), ("CSV files", "*.csv"), ("Excel files", "*.xlsx *.xls")]
             )
             if filename:
                 manifest_path.set(filename)
@@ -1285,7 +1344,7 @@ class ModularAnalysisApp:
         def browse_manifest():
             filename = filedialog.askopenfilename(
                 title="Select Pairing Manifest",
-                filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+                filetypes=[("All files", "*.*"), ("CSV files", "*.csv"), ("Excel files", "*.xlsx *.xls")]
             )
             if filename:
                 manifest_path.set(filename)
@@ -1399,7 +1458,7 @@ class ModularAnalysisApp:
         def browse_manifest():
             path = filedialog.askopenfilename(
                 title="Select Pairing Manifest",
-                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+                filetypes=[("All files", "*.*"), ("CSV files", "*.csv"), ("Excel files", "*.xlsx *.xls")]
             )
             if path:
                 manifest_path_var.set(path)

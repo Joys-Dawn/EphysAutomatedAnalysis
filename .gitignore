@@ -28,3 +28,6 @@ Thumbs.db
 build/
 dist/
 
+# Private tests
+tests/
+

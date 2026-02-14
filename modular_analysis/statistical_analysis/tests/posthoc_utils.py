@@ -25,22 +25,32 @@ def count_factor_levels(design, group_names: List[str]) -> Tuple[int, int]:
     Count unique levels for each factor in a factorial design.
     
     Args:
-        design: ExperimentalDesign object with factor_mapping
+        design: ExperimentalDesign object with factor_mapping (independent)
+                or pairing_manifest (mixed factorial)
         group_names: List of group names
         
     Returns:
         (n_factor1_levels, n_factor2_levels)
     """
-    factor1_levels = set()
-    factor2_levels = set()
-    
-    for group_name in group_names:
-        mapping = design.factor_mapping.get(group_name)
-        if mapping:
-            factor1_levels.add(mapping['factor1'])
-            factor2_levels.add(mapping['factor2'])
-    
-    return len(factor1_levels), len(factor2_levels)
+    # Independent factorial: use factor_mapping
+    if design.factor_mapping is not None:
+        factor1_levels = set()
+        factor2_levels = set()
+        for group_name in group_names:
+            mapping = design.factor_mapping.get(group_name)
+            if mapping:
+                factor1_levels.add(mapping['factor1'])
+                factor2_levels.add(mapping['factor2'])
+        return len(factor1_levels), len(factor2_levels)
+
+    # Mixed factorial: derive from manifest (f1=between, f2=within)
+    manifest = getattr(design, 'pairing_manifest', None)
+    if manifest is not None and not manifest.empty:
+        n_between = manifest['Group'].nunique() if 'Group' in manifest.columns else 1
+        n_within = manifest['Condition'].nunique() if 'Condition' in manifest.columns else 1
+        return n_between, n_within
+
+    return 0, 0
 
 
 def should_run_posthocs(anova_result: Dict, design, group_names: List[str]) -> Dict:

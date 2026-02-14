@@ -41,7 +41,9 @@ class StatisticalAnalyzer:
         self.extractor = DataExtractor(config)  # For adding Subject_IDs in mixed designs
         
     def run_analysis(self, design: ExperimentalDesign, base_path: str, 
-                     selected_measurements: Optional[List[str]] = None) -> Dict[str, any]:
+                     selected_measurements: Optional[List[str]] = None,
+                     mouse_log_path: Optional[str] = None,
+                     use_mixed_models: bool = False) -> Dict[str, any]:
         """Run complete statistical analysis for the given design.
         
         Parameters
@@ -52,6 +54,10 @@ class StatisticalAnalyzer:
             Path to the data directory
         selected_measurements : Optional[List[str]]
             List of measurement names to include in analysis. If None, all measurements are included.
+        mouse_log_path : Optional[str]
+            Path to mouse log CSV for mixed-effects models.
+        use_mixed_models : bool
+            If True, use mixed-effects models instead of classical tests.
         """
         
         logger.info(f"Starting analysis: {design.name}")
@@ -104,11 +110,17 @@ class StatisticalAnalyzer:
                 )
             
             # Run basic statistical tests (measurement comparisons)
-            statistical_results = self._run_statistical_tests(design, base_path, selected_measurements)
+            statistical_results = self._run_statistical_tests(
+                design, base_path, selected_measurements,
+                mouse_log_path=mouse_log_path, use_mixed_models=use_mixed_models
+            )
             results['statistical_results'] = statistical_results
             
             # Save basic statistical results
-            self._save_statistical_results(statistical_results, design, base_path)
+            self._save_statistical_results(
+                statistical_results, design, base_path,
+                mouse_log_path=mouse_log_path, use_mixed_models=use_mixed_models
+            )
 
             # Create formatted stats table (publication-style, selected params only)
             results_dir = os.path.join(base_path, self.config.output_dir)
@@ -158,16 +170,55 @@ class StatisticalAnalyzer:
         DesignType.MIXED_FACTORIAL: MixedANOVA,
     }
 
+    # Map design types to LMM-enhanced subclasses (lazy imports in methods)
+    _LMM_TEST_CLASS_MAP = None
+
+    @classmethod
+    def _get_lmm_class_map(cls):
+        """Lazy-import LMM subclass map to avoid circular / heavy imports at module level."""
+        if cls._LMM_TEST_CLASS_MAP is None:
+            from ..mixed_model_analysis.lmm_unpaired_ttest import LMMUnpairedTTest
+            from ..mixed_model_analysis.lmm_paired_ttest import LMMPairedTTest
+            from ..mixed_model_analysis.lmm_oneway_anova import LMMOneWayANOVA
+            from ..mixed_model_analysis.lmm_repeated_measures import LMMRepeatedMeasures
+            from ..mixed_model_analysis.lmm_two_way_anova import LMMTwoWayANOVA
+            from ..mixed_model_analysis.lmm_mixed_anova import LMMMixedANOVA
+            cls._LMM_TEST_CLASS_MAP = {
+                DesignType.INDEPENDENT_TWO_GROUP: LMMUnpairedTTest,
+                DesignType.PAIRED_TWO_GROUP: LMMPairedTTest,
+                DesignType.INDEPENDENT_MULTI_GROUP: LMMOneWayANOVA,
+                DesignType.REPEATED_MEASURES: LMMRepeatedMeasures,
+                DesignType.FACTORIAL_2X2: LMMTwoWayANOVA,
+                DesignType.MIXED_FACTORIAL: LMMMixedANOVA,
+            }
+        return cls._LMM_TEST_CLASS_MAP
+
     def _run_statistical_tests(self, design: ExperimentalDesign, base_path: str,
-                               selected_measurements: Optional[List[str]] = None) -> List[StatisticalResult]:
+                               selected_measurements: Optional[List[str]] = None,
+                               mouse_log_path: Optional[str] = None,
+                               use_mixed_models: bool = False) -> List[StatisticalResult]:
         """Select and run appropriate statistical tests based on design type."""
+        if use_mixed_models and mouse_log_path:
+            lmm_map = self._get_lmm_class_map()
+            lmm_class = lmm_map.get(design.design_type)
+            if lmm_class is None:
+                raise NotImplementedError(
+                    f"LMM not implemented for {design.design_type.value}"
+                )
+            logger.info("Using mixed-effects models for mouse clustering")
+            return lmm_class(mouse_log_path).run_analysis(
+                design, None, base_path, selected_measurements
+            )
+        
         test_class = self._TEST_CLASS_MAP.get(design.design_type)
         if test_class is None:
             raise NotImplementedError(f"Design type {design.design_type} not yet implemented")
         return test_class().run_analysis(design, None, base_path, selected_measurements)
     
     def _save_statistical_results(self, results: List[StatisticalResult], 
-                                 design: ExperimentalDesign, base_path: str) -> None:
+                                 design: ExperimentalDesign, base_path: str,
+                                 mouse_log_path: Optional[str] = None,
+                                 use_mixed_models: bool = False) -> None:
         """Save statistical results to files."""
         
         if not results:
@@ -177,6 +228,16 @@ class StatisticalAnalyzer:
         # Create output directory
         results_dir = os.path.join(base_path, self.config.output_dir)
         os.makedirs(results_dir, exist_ok=True)
+        
+        if use_mixed_models and mouse_log_path:
+            lmm_map = self._get_lmm_class_map()
+            lmm_class = lmm_map.get(design.design_type)
+            if lmm_class is None:
+                raise NotImplementedError(
+                    f"LMM not implemented for {design.design_type.value}"
+                )
+            lmm_class(mouse_log_path).save_results(results, base_path, design)
+            return
         
         test_class = self._TEST_CLASS_MAP.get(design.design_type)
         if test_class is None:

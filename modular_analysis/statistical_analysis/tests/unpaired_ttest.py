@@ -104,7 +104,7 @@ class UnpairedTTest:
     
     def _get_analysis_columns(self, df: pd.DataFrame) -> List[str]:
         """Get columns that should be analyzed statistically."""
-        exclude_columns = ["filename", "Group", "geno"]
+        exclude_columns = ["filename", "Group", "geno", "Mouse_ID"]
         return [col for col in df.columns if col not in exclude_columns]
     
     def _run_single_test(self, column: str, df1: pd.DataFrame, df2: pd.DataFrame,

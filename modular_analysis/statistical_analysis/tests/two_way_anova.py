@@ -246,14 +246,14 @@ class TwoWayANOVA:
                     category_effect_results = [
                         r for r in results 
                         if r.measurement_type == category_name 
-                        and r.test_name.startswith("Two-Way ANOVA")
+                        and r.test_name.startswith(self.name)
                         and "Interaction" in r.test_name
                     ]
                 else:
                     category_effect_results = [
                         r for r in results 
                         if r.measurement_type == category_name 
-                        and r.test_name.startswith("Two-Way ANOVA")
+                        and r.test_name.startswith(self.name)
                         and effect_type in r.test_name
                         and "Interaction" not in r.test_name
                     ]
@@ -558,13 +558,12 @@ class TwoWayANOVA:
     def _apply_posthoc_correction(self, posthoc_results: List[StatisticalResult]) -> List[StatisticalResult]:
         """Apply FDR correction to post-hoc comparisons within each measurement's family."""
         
-        # Group post-hoc results by measurement (each interaction family)
+        # Group post-hoc results by measurement (simple effects + marginals)
         measurement_groups = {}
         for result in posthoc_results:
-            if "Pairwise" in result.test_name:
-                if result.measurement not in measurement_groups:
-                    measurement_groups[result.measurement] = []
-                measurement_groups[result.measurement].append(result)
+            if result.measurement not in measurement_groups:
+                measurement_groups[result.measurement] = []
+            measurement_groups[result.measurement].append(result)
         
         # Apply FDR correction within each measurement's post-hoc tests
         for measurement, results_list in measurement_groups.items():
@@ -636,7 +635,7 @@ class TwoWayANOVA:
     
     def _get_analysis_columns(self, df: pd.DataFrame) -> List[str]:
         """Get columns that should be analyzed."""
-        exclude_columns = ["filename", "Group", "geno"]
+        exclude_columns = ["filename", "Group", "geno", "Mouse_ID"]
         return [col for col in df.columns if col not in exclude_columns]
     
     def save_results(self, results: List[StatisticalResult], base_path: str,
@@ -647,9 +646,9 @@ class TwoWayANOVA:
             logger.warning("No results to save")
             return
         
-        # Separate ANOVA effects and post-hoc results
-        anova_results = [r for r in results if "ANOVA" in r.test_name]
-        posthoc_results = [r for r in results if "Pairwise" in r.test_name]
+        # Separate omnibus effects and post-hoc results (simple effects + marginals)
+        anova_results = [r for r in results if r.test_name.startswith(self.name)]
+        posthoc_results = [r for r in results if not r.test_name.startswith(self.name)]
         
         # Get all groups
         if design and design.groups:
