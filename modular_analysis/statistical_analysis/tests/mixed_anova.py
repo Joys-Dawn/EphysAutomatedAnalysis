@@ -1001,7 +1001,10 @@ class MixedANOVA:
             
             if interaction_result:
                 row["MeasurementType"] = interaction_result.measurement_type
-            
+                row["Test_Type"] = interaction_result.test_name.split(" - ")[0]
+            else:
+                row["Test_Type"] = ""
+
             # Calculate group stats from raw data
             group_stats = {}
             if raw_group_data:
@@ -1069,12 +1072,12 @@ class MixedANOVA:
         combined_df = pd.DataFrame(combined_data)
         
         # Order columns: Measurement, MeasurementType, groups, effects, post-hoc
-        ordered_columns = ["Measurement", "MeasurementType"]
-        
+        ordered_columns = ["Measurement", "MeasurementType", "Test_Type"]
+
         # Add group columns in order
         for group in all_groups:
             ordered_columns.extend([f"{group}_mean", f"{group}_stderr", f"{group}_n"])
-        
+
         # Add effect columns
         ordered_columns.extend([
             f"{design.between_factor_name}_p-value", f"{design.between_factor_name}_corrected_p",

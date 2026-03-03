@@ -285,21 +285,23 @@ LMMs require [R](https://www.r-project.org/) to be installed on your system. The
 **Windows:**
 1. Download R from https://cran.r-project.org/bin/windows/base/
 2. Run the installer. **Important**: when prompted, check **"Add R to PATH"** (or "Save version number in registry").
-3. Restart the application after installing R.
+3. Download and install Rtools from https://cran.r-project.org/bin/windows/Rtools/ (required for compiling R packages from source).
+4. Restart the application after installing R and Rtools.
 
 **macOS:**
 1. Download the `.pkg` installer from https://cran.r-project.org/bin/macosx/
 2. Run the installer (R is added to PATH automatically).
 3. Alternatively: `brew install r` if you use Homebrew.
+4. Install Xcode Command Line Tools if not already installed (required for compiling R packages from source): `xcode-select --install`
 
 **Linux (Debian/Ubuntu):**
 ```
-sudo apt install r-base
+sudo apt install r-base build-essential
 ```
 
 **Linux (Fedora/RHEL):**
 ```
-sudo dnf install R
+sudo dnf install R gcc gcc-c++ make
 ```
 
 If R is not installed or cannot be found, the application silently falls back to classical tests for all measurements.
@@ -314,7 +316,7 @@ To use LMMs, you need a **mouse log** CSV file that maps each recording file to 
 | 2024_03_14_0021.abf | WT_mouse1 |
 | 2024_03_14_0022.abf | KO_mouse2 |
 
-- **Filename**: The `.abf` filename (with or without extension).
+- **Filename**: The recording filename; you can include or omit the `.abf` extension (both work).
 - **Mouse_ID**: An identifier for the mouse. Multiple cells from the same mouse share the same ID.
 
 Every `.abf` file used in the analysis must appear in the mouse log.

@@ -697,7 +697,10 @@ class TwoWayANOVA:
             
             if interaction_result:
                 row["MeasurementType"] = interaction_result.measurement_type
-            
+                row["Test_Type"] = interaction_result.test_name.split(" - ")[0]
+            else:
+                row["Test_Type"] = ""
+
             # Calculate group stats from raw data
             group_stats = {}
             if raw_group_data:
@@ -764,12 +767,12 @@ class TwoWayANOVA:
         combined_df = pd.DataFrame(combined_data)
         
         # Order columns: Measurement, MeasurementType, groups, ANOVA effects, post-hoc
-        ordered_columns = ["Measurement", "MeasurementType"]
-        
+        ordered_columns = ["Measurement", "MeasurementType", "Test_Type"]
+
         # Add group columns in order
         for group in all_groups:
             ordered_columns.extend([f"{group}_mean", f"{group}_stderr", f"{group}_n"])
-        
+
         # Add ANOVA effect columns (p-value first, then corrected_p for each effect)
         ordered_columns.extend([
             f"{design.factor1_name}_p-value", f"{design.factor1_name}_corrected_p",

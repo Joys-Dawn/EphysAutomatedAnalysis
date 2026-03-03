@@ -59,7 +59,8 @@ def load_mouse_log(path: str) -> Dict[str, str]:
     if df.empty:
         raise ValueError("Mouse log is empty after dropping missing values")
     
-    # Build mapping (use basename only for matching)
+    # Build mapping (use basename only). Data always has .abf in filename;
+    # if the user omitted it in the log, add that key so lookup succeeds.
     mapping = {}
     for _, row in df.iterrows():
         fname = os.path.basename(str(row[filename_col]).strip())
@@ -68,8 +69,10 @@ def load_mouse_log(path: str) -> Dict[str, str]:
             logger.warning(f"Duplicate filename '{fname}' with different Mouse_IDs: "
                          f"'{mapping[fname]}' vs '{mouse_id}'. Using last value.")
         mapping[fname] = mouse_id
-    
-    logger.info(f"Loaded mouse log: {len(mapping)} files across "
+        if not fname.lower().endswith('.abf'):
+            mapping[fname + '.abf'] = mouse_id
+
+    logger.info(f"Loaded mouse log: {len(df)} files across "
                 f"{len(set(mapping.values()))} mice")
     return mapping
 
