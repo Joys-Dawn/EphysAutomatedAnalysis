@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -m pytest tests/test_twoway.py tests/test_mixed_anova.py -v)",
-      "Bash(python -m pytest tests/ -v)"
-    ]
-  }
-}
