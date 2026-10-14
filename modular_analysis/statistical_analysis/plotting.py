@@ -161,7 +161,7 @@ class PlotGenerator:
             
             plt.tight_layout()
             
-            output_path = os.path.join(base_path, "Results", "Plot_AP_Num_vs_Peak.png")
+            output_path = os.path.join(base_path, "Results", "Plot_AP_Num_vs_Peak.svg")
             plt.savefig(output_path)
             plt.close('all')
             
@@ -182,7 +182,7 @@ class PlotGenerator:
                 if not data.empty and 'ISI_CoV' in data.columns and 'Initial Burst Length (ms)' in data.columns:
                     group_data[group.name] = data
                     
-            if len(group_data) < 2:
+            if len(group_data) < 1:
                 logger.warning("Insufficient data for burst analysis plot")
                 return None
                 
@@ -233,7 +233,7 @@ class PlotGenerator:
             
             plt.tight_layout()
             
-            output_path = os.path.join(base_path, "Results", "Plot_ISI_cov_vs_burst_length.png")
+            output_path = os.path.join(base_path, "Results", "Plot_ISI_cov_vs_burst_length.svg")
             plt.savefig(output_path)
             plt.close('all')
             
@@ -406,13 +406,23 @@ class PlotGenerator:
             # rotation_mode='anchor' ensures the label rotates around the anchor point (ha, va)
             # This centers the label under the tick when rotated
             ax.set_xticklabels(group_order, rotation=45, ha='right', rotation_mode='anchor')
-            ax.set_ylabel(column, fontsize=self.config.font_size_label)
+            # Wrap long measurement names so they fit the rectangular single-
+            # column layout. Generic rule: break on " - " (e.g. "Max Steady-
+            # state (Hz) - first 100 ms").
+            if " - " in column:
+                ylabel = column.replace(" - ", "\n")
+            else:
+                ylabel = column
+            ax.set_ylabel(ylabel, fontsize=self.config.font_size_label)
             
             plt.tight_layout()
             
-            # Save plot
-            output_path = os.path.join(base_path, "Results", f"Plot_{column}.png")
-            plt.savefig(output_path)
+            # Save plot. bbox_inches='tight' expands the canvas to include
+            # the full ylabel even when tight_layout can't fit it within
+            # the original figsize (long labels like "AP Half-Width" with
+            # large font otherwise get clipped at the left margin).
+            output_path = os.path.join(base_path, "Results", f"Plot_{column}.svg")
+            plt.savefig(output_path, bbox_inches='tight')
             plt.close('all')
             
             return output_path
@@ -483,7 +493,7 @@ class PlotGenerator:
             
             plt.tight_layout()
             
-            output_path = os.path.join(base_path, "Results", "Plot_Current_vs_frequency.png")
+            output_path = os.path.join(base_path, "Results", "Plot_Current_vs_frequency.svg")
             plt.savefig(output_path)
             plt.close('all')
             
@@ -556,7 +566,7 @@ class PlotGenerator:
             
             plt.tight_layout()
             
-            output_path = os.path.join(base_path, "Results", "Plot_Fold_Rheobase_vs_frequency.png")
+            output_path = os.path.join(base_path, "Results", "Plot_Fold_Rheobase_vs_frequency.svg")
             plt.savefig(output_path)
             plt.close('all')
             

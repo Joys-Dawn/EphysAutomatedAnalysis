@@ -16,7 +16,21 @@ class DesignManager:
     """Manages experimental design creation and validation."""
     
     @staticmethod
-    def create_two_group_independent(group1: GroupInfo, group2: GroupInfo, 
+    def create_single_group(group: GroupInfo, name: str = "") -> ExperimentalDesign:
+        """Create a single-group descriptive design (no comparisons).
+
+        Use when group B does not yet exist (or won't), and the deliverable
+        is per-cell scatterplots + a parameter summary for just group A.
+        """
+        return ExperimentalDesign(
+            design_type=DesignType.DESCRIPTIVE_SINGLE_GROUP,
+            groups=[group],
+            name=name or f"{group.name} (descriptive)",
+            description=f"Single-group descriptive analysis of {group.name}",
+        )
+
+    @staticmethod
+    def create_two_group_independent(group1: GroupInfo, group2: GroupInfo,
                                    name: str = "") -> ExperimentalDesign:
         """Create a two-group independent design (A vs B)."""
         return ExperimentalDesign(
@@ -205,7 +219,10 @@ class DesignManager:
         if not design.groups:
             errors.append("Design must have at least one group")
             
-        if design.design_type == DesignType.INDEPENDENT_TWO_GROUP:
+        if design.design_type == DesignType.DESCRIPTIVE_SINGLE_GROUP:
+            if len(design.groups) != 1:
+                errors.append("Single-group descriptive design must have exactly 1 group")
+        elif design.design_type == DesignType.INDEPENDENT_TWO_GROUP:
             if len(design.groups) != 2:
                 errors.append("Two-group design must have exactly 2 groups")
         elif design.design_type == DesignType.INDEPENDENT_MULTI_GROUP:
@@ -462,6 +479,8 @@ class DesignManager:
     def get_supported_designs() -> Dict[str, DesignType]:
         """Get dictionary of supported design types."""
         return {
+            # Descriptive (no comparisons)
+            "Single group (descriptive only) - 1 group (A), no comparisons": DesignType.DESCRIPTIVE_SINGLE_GROUP,
             # Independent Groups
             "2 independent groups - 1 factor (between), 2 levels (A vs B)": DesignType.INDEPENDENT_TWO_GROUP,
             "3+ independent groups - 1 factor (between), 3+ levels (A vs B vs C...)": DesignType.INDEPENDENT_MULTI_GROUP,

@@ -109,6 +109,9 @@ def get_measurement_categories() -> Dict[str, List[str]]:
         "Repetitive AP Property": [
             "Max Instantaneous (Hz)",
             "Max Steady-state (Hz)",
+            "Max Steady-state (Hz) - first 100 ms",
+            "Max Steady-state (Hz) - first 250 ms",
+            "Max Steady-state (Hz) - first 500 ms",
             "ISI_CoV",
             "SFA10",
             "SFAn",

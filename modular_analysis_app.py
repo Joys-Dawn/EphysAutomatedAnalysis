@@ -783,6 +783,7 @@ class ModularAnalysisApp:
             try:
                 # Color mapping (display name to actual color value)
                 color_display_to_value = {
+                    'black': 'black',
                     'blue': 'blue',
                     'red': 'red',
                     'green': 'green',
@@ -797,7 +798,7 @@ class ModularAnalysisApp:
                     'light blue': '#87CEEB',
                     'light red': '#FFA07A'
                 }
-                
+
                 # Set group properties
                 for i, group in enumerate(self.selected_groups):
                     if group.name in self.group_color_vars:
@@ -809,7 +810,11 @@ class ModularAnalysisApp:
                 # Create experimental design based on design type and number of groups
                 design_name = self.design_type.get()
                 
-                if "Mixed factorial" in design_name:
+                if "Single group" in design_name:
+                    design = DesignManager.create_single_group(
+                        self.selected_groups[0]
+                    )
+                elif "Mixed factorial" in design_name:
                     # Dependent factorial design with manifest
                     design = DesignManager.create_mixed_factorial(
                         self.selected_groups,
@@ -886,7 +891,9 @@ class ModularAnalysisApp:
     def _get_min_groups_for_design(self) -> int:
         """Get minimum number of groups for selected design type."""
         design_name = self.design_type.get()
-        if "2 independent groups" in design_name or "Paired design" in design_name:
+        if "Single group" in design_name:
+            return 1
+        elif "2 independent groups" in design_name or "Paired design" in design_name:
             return 2
         elif "Mixed factorial" in design_name:
             return 4  # Minimum N×M is 2×2 = 4 groups
@@ -898,11 +905,13 @@ class ModularAnalysisApp:
             return 3
         else:
             return 2  # Default
-    
+
     def _get_max_groups_for_design(self) -> int:
         """Get maximum number of groups for selected design type."""
         design_name = self.design_type.get()
-        if "2 independent groups" in design_name or "Paired design" in design_name:
+        if "Single group" in design_name:
+            return 1
+        elif "2 independent groups" in design_name or "Paired design" in design_name:
             return 2
         else:
             return 20
@@ -931,6 +940,7 @@ class ModularAnalysisApp:
         # Create color/italic controls for each selected group
         # Map display names to actual color values (hex codes for custom colors)
         color_display_to_value = {
+            'black': 'black',
             'blue': 'blue',
             'red': 'red',
             'green': 'green',

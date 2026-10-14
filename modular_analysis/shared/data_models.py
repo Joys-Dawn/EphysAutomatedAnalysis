@@ -10,6 +10,7 @@ import pandas as pd
 
 class DesignType(Enum):
     """Types of experimental designs."""
+    DESCRIPTIVE_SINGLE_GROUP = "descriptive_single_group"  # 1 group, descriptive only (no comparisons)
     INDEPENDENT_TWO_GROUP = "independent_2_group"
     INDEPENDENT_MULTI_GROUP = "independent_multi_group"
     FACTORIAL_2X2 = "factorial_2x2"  # N×M factorial design (2 factors with N and M levels each)
@@ -59,7 +60,8 @@ class ExperimentalDesign:
         return self.design_type in [
             DesignType.INDEPENDENT_TWO_GROUP,
             DesignType.INDEPENDENT_MULTI_GROUP,
-            DesignType.FACTORIAL_2X2
+            DesignType.FACTORIAL_2X2,
+            DesignType.DESCRIPTIVE_SINGLE_GROUP,
         ]
     
     def is_paired(self) -> bool:

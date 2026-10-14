@@ -155,7 +155,7 @@ class Sweep(object):
             ax2.set_ylabel("Voltage (mV)")
             ax2.set_title("Output Signal and its Derivative for {}".format(self.sweep_name))
             ax2.legend(loc="center right")
-            plt.savefig("C:\\Users\\Yiannos\\Documents\\Mattis Lab\\MattisLab\\Test3\\derivative_{}.png".format(self.sweep_name))
+            plt.savefig("C:\\Users\\Yiannos\\Documents\\Mattis Lab\\MattisLab\\Test3\\derivative_{}.svg".format(self.sweep_name))
 
         return d_dt_output
 
@@ -192,7 +192,7 @@ class Sweep(object):
         ax2.legend(loc='center right')
         ax2.set_title("Input and Output Signals for {}".format(self.sweep_name))
 
-        plt.savefig("io_{}.png".format(self.sweep_name))
+        plt.savefig("io_{}.svg".format(self.sweep_name))
 
 
 class CurrentStepsSweep(Sweep):
@@ -320,6 +320,26 @@ class CurrentStepsSweep(Sweep):
         logger.debug('Steady state firing frequency of {} is {}'.format(self.sweep_name, freq))
 
         return freq
+
+    def get_steady_state_ap_frequency_in_window(self, window_duration_s: float) -> float:
+        """Mean firing frequency over the first `window_duration_s` of the
+        depolarizing step. Counts APs whose peak time falls within
+        [stim_start, stim_start + window_duration_s] and divides by the
+        window duration.
+
+        If the natural stimulus is shorter than the requested window, falls
+        back to the natural duration (so behavior matches
+        get_steady_state_ap_frequency for short steps).
+        """
+        start, end = self.get_input_start_end()
+        natural_dur = end - start
+        if window_duration_s <= 0 or natural_dur <= 0:
+            return 0.0
+        used_dur = min(window_duration_s, natural_dur)
+        window_end = start + used_dur
+        aps = self.get_aps()
+        n_in_window = sum(1 for ap in aps if start <= ap[0] <= window_end)
+        return n_in_window / used_dur
 
     def get_min_instantaneous_ap_frequency(self):
         """
@@ -1080,7 +1100,7 @@ def _plot_max_ss_verification(sweeps, frequencies, max_frequency_idx, max_freque
             plot_color = 'g'
         plt.plot(sweep.time_steps, sweep.output_signal + offset, color=plot_color)
     plt.gca().get_yaxis().set_visible(False)
-    plt.savefig("max_ss_{}.png".format(sweep.sweep_name))
+    plt.savefig("max_ss_{}.svg".format(sweep.sweep_name))
 
 
 def _compute_burst_metrics(aps):
@@ -1279,6 +1299,20 @@ class CurrentStepsData(ExperimentData):
             _plot_max_ss_verification(self.sweeps, frequencies, max_frequency_idx, max_frequency)
 
         return max_frequency
+
+    def get_max_steady_state_firing_frequency_in_window(self, window_duration_s: float) -> float:
+        """Max across sweeps of the windowed steady-state frequency. Useful
+        when the canonical full-step Max-SS is depressed by depolarization
+        block late in the step, and the early portion of the step better
+        reflects the cell's recruited firing rate.
+        """
+        freqs = []
+        for sweep in self.sweeps:
+            try:
+                freqs.append(sweep.get_steady_state_ap_frequency_in_window(window_duration_s))
+            except Exception:
+                continue
+        return max(freqs) if freqs else 0.0
 
     def get_burst_metrics_from_max_ss_sweep(self):
         """ISI CoV, initial burst length, and maximal burst length from the max steady-state sweep.
@@ -1584,7 +1618,7 @@ class CurrentStepsData(ExperimentData):
                 horizontalalignment='right',
                 verticalalignment='top')
 
-            plt.savefig("{}".format(rheobase_sweep.sweep_name))
+            plt.savefig("{}.svg".format(rheobase_sweep.sweep_name))
 
         #logger.info('Getting AP half-width from the first AP elicited')
 

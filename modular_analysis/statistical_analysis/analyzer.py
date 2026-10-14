@@ -104,18 +104,29 @@ class StatisticalAnalyzer:
                 logger.info(f"Adding Subject_IDs to extracted data for {design_label}...")
                 selected_group_names = [g.name for g in design.groups]
                 self.extractor.add_subject_ids_to_extracted_data(
-                    base_path, 
+                    base_path,
                     design.pairing_manifest,
                     selected_group_names
                 )
-            
+
+            if design.design_type == DesignType.DESCRIPTIVE_SINGLE_GROUP:
+                # Descriptive-only path: no comparison stats, no frequency/attenuation
+                # comparison curves. Still emit per-measurement scatterplots (1 column
+                # with mean ± SEM) and the standalone current-vs-frequency curve.
+                logger.info("Single-group descriptive mode: skipping comparison statistics")
+                plot_files = self._generate_plots(design, base_path, attenuation_data=None)
+                results['plot_files'] = plot_files
+                results['success'] = True
+                logger.info(f"Analysis completed successfully for {design.name}")
+                return results
+
             # Run basic statistical tests (measurement comparisons)
             statistical_results = self._run_statistical_tests(
                 design, base_path, selected_measurements,
                 mouse_log_path=mouse_log_path, use_mixed_models=use_mixed_models
             )
             results['statistical_results'] = statistical_results
-            
+
             # Save basic statistical results
             self._save_statistical_results(
                 statistical_results, design, base_path,
@@ -129,23 +140,23 @@ class StatisticalAnalyzer:
             # Run frequency analyses (current and fold rheobase vs frequency)
             frequency_results = self._run_frequency_analyses(design, base_path)
             results['frequency_analysis'] = frequency_results
-            
+
             # Run attenuation analysis (AP number vs peak)
             attenuation_results = self._run_attenuation_analysis(design, base_path)
             results['attenuation_analysis'] = attenuation_results
-            
+
             # Collect mixed-effects results
             mixed_effects_results = self._collect_mixed_effects_results(frequency_results, attenuation_results)
             results['mixed_effects_results'] = mixed_effects_results
-            
+
             # Save mixed-effects results
             self._save_mixed_effects_results(mixed_effects_results, base_path)
             self._save_mixed_effects_posthoc_results(mixed_effects_results, base_path)
-            
+
             # Generate plots (including attenuation plot)
             plot_files = self._generate_plots(design, base_path, attenuation_results)
             results['plot_files'] = plot_files
-            
+
             results['success'] = True
             logger.info(f"Analysis completed successfully for {design.name}")
             

@@ -26,6 +26,9 @@ def analyze_cc(ABF_LOCATION, CURRENT_VS_APS_OUTPUT_FILE, ANALYSIS_OUTPUT_FILE, A
     max_instantaneous_firing_frequency_output = {}
     min_instantaneous_firing_frequency_output = {}
     max_steady_state_firing_frequency_output = {}
+    max_steady_state_firing_frequency_100ms_output = {}
+    max_steady_state_firing_frequency_250ms_output = {}
+    max_steady_state_firing_frequency_500ms_output = {}
     spike_frequency_adaptation_10_output = {}
     spike_frequency_adaptation_N_output = {}
     time_constant_output = {}
@@ -85,6 +88,22 @@ def analyze_cc(ABF_LOCATION, CURRENT_VS_APS_OUTPUT_FILE, ANALYSIS_OUTPUT_FILE, A
         
         print("Extracting max SSFF")
         max_steady_state_firing_frequency_output[filename] = experiment.get_max_steady_state_firing_frequency()
+
+        print("Extracting max SSFF over first 100 ms")
+        max_steady_state_firing_frequency_100ms_output[filename] = (
+            experiment.get_max_steady_state_firing_frequency_in_window(0.100)
+        )
+
+        print("Extracting max SSFF over first 250 ms")
+        max_steady_state_firing_frequency_250ms_output[filename] = (
+            experiment.get_max_steady_state_firing_frequency_in_window(0.250)
+        )
+
+        print("Extracting max SSFF over first 500 ms")
+        max_steady_state_firing_frequency_500ms_output[filename] = (
+            experiment.get_max_steady_state_firing_frequency_in_window(0.500)
+        )
+
         print("Extracting burst metrics from max SS sweep")
         isi_cov_output[filename], initial_burst_length_output[filename], maximal_burst_length_output[filename] = experiment.get_burst_metrics_from_max_ss_sweep()
        
@@ -167,14 +186,17 @@ def analyze_cc(ABF_LOCATION, CURRENT_VS_APS_OUTPUT_FILE, ANALYSIS_OUTPUT_FILE, A
 
     # Writing the additional analysis to output file
     with open(ANALYSIS_OUTPUT_FILE, 'w') as f:
-        f.write("filename,Rheobase (pA),Time Constant (ms),Sag,Max Steady-state (Hz),Max Instantaneous (Hz),SFA10,SFAn,ISI_CoV,Initial Burst Length (ms),Maximal Burst Length (ms),AP Threshold (mV),AP Peak (mV),AP Amplitude (mV),AP Rise Time (ms),AP Half-Width (ms),APD 50 (ms),APD 90 (ms)\n")
+        f.write("filename,Rheobase (pA),Time Constant (ms),Sag,Max Steady-state (Hz),Max Steady-state (Hz) - first 100 ms,Max Steady-state (Hz) - first 250 ms,Max Steady-state (Hz) - first 500 ms,Max Instantaneous (Hz),SFA10,SFAn,ISI_CoV,Initial Burst Length (ms),Maximal Burst Length (ms),AP Threshold (mV),AP Peak (mV),AP Amplitude (mV),AP Rise Time (ms),AP Half-Width (ms),APD 50 (ms),APD 90 (ms)\n")
         for filename in ap_half_width_output:
-            f.write('{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(
+            f.write('{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(
                 filename,
                 rheobase_output[filename],
                 time_constant_output[filename],
                 sag_per_current_output[filename],
                 max_steady_state_firing_frequency_output[filename],
+                max_steady_state_firing_frequency_100ms_output[filename],
+                max_steady_state_firing_frequency_250ms_output[filename],
+                max_steady_state_firing_frequency_500ms_output[filename],
                 max_instantaneous_firing_frequency_output[filename],
                 spike_frequency_adaptation_10_output[filename],
                 spike_frequency_adaptation_N_output[filename],
