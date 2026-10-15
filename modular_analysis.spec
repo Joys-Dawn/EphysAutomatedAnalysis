@@ -53,6 +53,7 @@ hiddenimports = [
     # matplotlib backends
     'matplotlib',
     'matplotlib.backends.backend_tkagg',
+    'matplotlib.backends.backend_svg',
     # pandas
     'pandas',
     # numpy
