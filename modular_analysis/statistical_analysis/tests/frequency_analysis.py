@@ -9,7 +9,6 @@ import os
 import logging
 import math
 from typing import List, Dict, Tuple, Optional
-from collections import defaultdict
 
 import statsmodels.stats.multitest as multi
 from statsmodels.formula.api import mixedlm
@@ -262,41 +261,29 @@ class FrequencyAnalyzer:
                 fold_rheo_path = os.path.join(base_path, "Results", f"Calc_{group_name}_frequency_vs_fold_rheobase.csv")
                 c_vs_f_data.to_csv(fold_rheo_path, index=False)
             
-            # Make fold-rheobase data for analysis
-            points = []
-            for i in range(len(curr_cols)):
-                for j in range(c_vs_f_data.loc[:, curr_cols[i]].shape[0]):
-                    curr = c_vs_f_data.loc[:, curr_cols[i]][j]
-                    points.append((curr, c_vs_f_data.loc[:, val_cols[i]][j]))
-
-            point_dict = defaultdict(list)
-            folds = []
-            for i, j in points:
+            # Each value column remains one cell. Align complete recordings by
+            # actual fold; different rheobases produce different fold grids.
+            cell_data = {}
+            for current_col, value_col in zip(curr_cols, val_cols):
+                # The shift above pads the end of each cell's export with NaNs.
+                recorded = c_vs_f_data[current_col].notna()
+                cell_values = pd.Series(
+                    c_vs_f_data.loc[recorded, value_col].to_numpy(),
+                    index=c_vs_f_data.loc[recorded, current_col].to_numpy(),
+                )
                 if integers_only:
-                    # Only integer folds 1-10 (for plotting and point-by-point ANOVA)
-                    if i in [1,2,3,4,5,6,7,8,9,10]:
-                        point_dict[i].append(j)
-                        folds.append(i)
-                else:
-                    # All fold rheobase values (for mixed model - better convergence)
-                    if not np.isnan(i) and not np.isnan(j):
-                        point_dict[i].append(j)
-                        folds.append(i)
+                    cell_values = cell_values[cell_values.index.isin(range(1, 11))]
+                cell_data[value_col] = cell_values
 
-            folds = list(set(folds))
-            folds.sort()
-            final_df = pd.DataFrame.from_dict(point_dict, orient='index')
-            new_col_names = []
-            for i in range(len(final_df.columns)):
-                new_col_names.append("Values_{}".format(i))
-            final_df.columns = new_col_names
+            final_df = pd.DataFrame(cell_data).sort_index()
+            cell_columns = list(cell_data)
 
             # Calculate mean and stderr
-            final_df['n'] = final_df[new_col_names].count(axis=1)
-            final_df['mean'] = final_df[new_col_names].mean(axis=1)
-            final_df['se'] = final_df[new_col_names].sem(axis=1)
+            final_df['n'] = final_df[cell_columns].count(axis=1)
+            final_df['mean'] = final_df[cell_columns].mean(axis=1)
+            final_df['se'] = final_df[cell_columns].sem(axis=1)
 
-            final_df.insert(0, 'Fold Rheobase', folds)
+            final_df.insert(0, 'Fold Rheobase', final_df.index)
             
             return final_df
             
@@ -1003,19 +990,23 @@ class FrequencyAnalyzer:
                         # Create consistent cell ID across groups
                         cell_id = f"{group_name}_{cell_idx}"
                         
+                        if analysis_type == 'current':
+                            observations = (
+                                (self.protocol_config.min_current + step_idx * self.protocol_config.step_size, freq_val)
+                                for step_idx, freq_val in enumerate(group_data[col].dropna())
+                            )
+                        else:
+                            # Remove fold-grid alignment gaps with their fold
+                            # labels, so each cell keeps its actual coordinates.
+                            observations = group_data[['Fold Rheobase', col]].dropna().itertuples(index=False, name=None)
+
                         # Add data for this cell across all steps
-                        for step_idx, freq_val in enumerate(group_data[col].dropna()):
+                        for step_value, freq_val in observations:
                             if analysis_type == 'current':
-                                step_value = self.protocol_config.min_current + (step_idx * self.protocol_config.step_size)
                                 # CRITICAL: Match original behavior - only include Current > 0 in mixed effects model
                                 if step_value <= 0:
                                     continue
                             else:  # fold_rheobase
-                                # Get fold rheobase value from data or use default
-                                if 'Fold Rheobase' in group_data.columns and step_idx < len(group_data):
-                                    step_value = group_data['Fold Rheobase'].iloc[step_idx]
-                                else:
-                                    step_value = 0.5 + (step_idx * 0.5)
                                 if step_value > 10:
                                     continue
                                 

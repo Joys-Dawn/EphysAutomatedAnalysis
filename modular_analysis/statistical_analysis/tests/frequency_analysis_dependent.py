@@ -421,6 +421,15 @@ class FrequencyAnalyzerDependent:
         
         cond1_data = all_group_data[cond1_name]
         cond2_data = all_group_data[cond2_name]
+
+        # Values_N reflects file order within a condition, not subject identity.
+        # Resolve each subject's value column separately in the two conditions.
+        cond2_columns = dict(_pair_subject_value_columns(cond2_data))
+        paired_columns = [
+            (subject, value_col, cond2_columns[subject])
+            for subject, value_col in _pair_subject_value_columns(cond1_data)
+            if subject in cond2_columns
+        ]
         
         if analysis_type == 'current':
             max_steps = min(len(cond1_data), len(cond2_data))
@@ -429,11 +438,10 @@ class FrequencyAnalyzerDependent:
                 if current_value <= 0:
                     continue
                 
-                pairs = _pair_subject_value_columns(cond1_data)
-                for subject_col, value_col in pairs:
-                    if value_col in cond1_data.columns and value_col in cond2_data.columns:
-                        freq1 = cond1_data[value_col].iloc[step_idx] if step_idx < len(cond1_data) else np.nan
-                        freq2 = cond2_data[value_col].iloc[step_idx] if step_idx < len(cond2_data) else np.nan
+                for subject_col, value_col1, value_col2 in paired_columns:
+                    if value_col1 in cond1_data.columns and value_col2 in cond2_data.columns:
+                        freq1 = cond1_data[value_col1].iloc[step_idx] if step_idx < len(cond1_data) else np.nan
+                        freq2 = cond2_data[value_col2].iloc[step_idx] if step_idx < len(cond2_data) else np.nan
                         
                         if pd.notna(freq1):
                             all_data.append({
@@ -451,17 +459,16 @@ class FrequencyAnalyzerDependent:
                             })
         
         else:  # fold_rheobase - use ALL data for better convergence (not just integers 1-10)
-            pairs = _pair_subject_value_columns(cond1_data)
-            for subject_col, value_col in pairs:
-                if value_col in cond1_data.columns and value_col in cond2_data.columns:
+            for subject_col, value_col1, value_col2 in paired_columns:
+                if value_col1 in cond1_data.columns and value_col2 in cond2_data.columns:
                     # Calculate for condition 1 - ALL fold rheobase values
-                    frequencies1 = cond1_data[value_col].values
+                    frequencies1 = cond1_data[value_col1].values
                     rheobase_idx1 = np.argmax(frequencies1 > 0) if np.any(frequencies1 > 0) else 0
                     rheobase_current1 = (rheobase_idx1 * self.protocol_config.step_size) + self.protocol_config.min_current
                     
                     # Loop through ALL available steps from rheobase to end
                     for target_idx1 in range(rheobase_idx1, len(cond1_data)):
-                        freq1 = cond1_data[value_col].iloc[target_idx1]
+                        freq1 = cond1_data[value_col1].iloc[target_idx1]
                         if pd.notna(freq1):
                             # Calculate actual fold rheobase as current ratio (includes fractional values)
                             current_at_step1 = (target_idx1 * self.protocol_config.step_size) + self.protocol_config.min_current
@@ -474,13 +481,13 @@ class FrequencyAnalyzerDependent:
                             })
                     
                     # Calculate for condition 2 - ALL fold rheobase values
-                    frequencies2 = cond2_data[value_col].values
+                    frequencies2 = cond2_data[value_col2].values
                     rheobase_idx2 = np.argmax(frequencies2 > 0) if np.any(frequencies2 > 0) else 0
                     rheobase_current2 = (rheobase_idx2 * self.protocol_config.step_size) + self.protocol_config.min_current
                     
                     # Loop through ALL available steps from rheobase to end
                     for target_idx2 in range(rheobase_idx2, len(cond2_data)):
-                        freq2 = cond2_data[value_col].iloc[target_idx2]
+                        freq2 = cond2_data[value_col2].iloc[target_idx2]
                         if pd.notna(freq2):
                             # Calculate actual fold rheobase as current ratio (includes fractional values)
                             current_at_step2 = (target_idx2 * self.protocol_config.step_size) + self.protocol_config.min_current
